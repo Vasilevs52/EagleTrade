@@ -1,4 +1,4 @@
-from binance import Client
+from binance.client import Client
 import pandas as pd
 
 class BinanceBroker():
