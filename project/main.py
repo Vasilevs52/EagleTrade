@@ -12,7 +12,7 @@ ema_window = 50
 lwma_window = 50
 volatility_window = 50
 V0 = 0
-δ = 0.1
+betta = 0.1
 
 def ruber_bend_up_strategy(
         prices: pd.Series,
@@ -25,77 +25,9 @@ def ruber_bend_up_strategy(
         r_low: float = 0.0001,
         r_high: float = 0.0004,
         k: float = 1.0,
-        δ: float = 0.01
+        betta: float = 0.01
 ) -> Tuple[pd.Series, pd.Series, pd.Series, pd.Series, pd.Series]:
-    """
-    Реализация стратегии "Ruber bend UP" с динамическими условиями входа/выхода.
 
-    Параметры:
-        prices: pd.Series - ряд цен
-        sma_window: int - окно SMA
-        ema_window: int - окно EMA
-        lwma_window: int - окно LWMA
-        volatility_window: int - окно волатильности
-        take_profit_pct: float - уровень TP в %
-        stop_loss_pct: float - уровень SL в %
-        r_threshold: float - порог доходности для входа
-
-    Возвращает:
-        tuple: (sma, ema, lwma, volatility, signals)
-    """
-
-
-    """
-    # 2. LWMA с лог-весами
-    weights = np.log(np.arange(1, lwma_window + 1))
-    weights /= weights.sum()
-    lwma = prices.rolling(lwma_window).apply(lambda x: np.sum(x * weights), raw=True)
-
-    # 3. Волатильность (лог-доходности)
-    log_returns = np.log(prices / prices.shift(1))
-    volatility = log_returns.rolling(volatility_window).std() * np.sqrt(252)  # Годовая волатильность
-
-    # 4. Динамическое основание (взвешенная волатильность)
-    weighted_volatility = volatility * prices / prices.rolling(volatility_window).mean()
-
-    # 5. Сигналы
-    signals = pd.Series(0, index=prices.index)
-    position = 0
-    entry_price = 0
-    
-    for i in range(1, len(prices)):
-        # Условия входа LONG
-        if position == 0 and (
-                (ema[i] > sma[i]) and
-                (prices[i] > lwma[i]) and
-                (log_returns[i] > r_threshold) and
-                (weighted_volatility[i] < 1.5 * weighted_volatility.median())
-        ):
-            signals.iloc[i] = 1
-            position = 1
-            entry_price = prices[i]
-
-        # Условия входа SHORT
-        elif position == 0 and (
-                (ema[i] < sma[i]) and
-                (prices[i] < lwma[i]) and
-                (log_returns[i] < -r_threshold) and
-                (weighted_volatility[i] > weighted_volatility.median())
-        ):
-            signals.iloc[i] = -1
-            position = -1
-            entry_price = prices[i]
-
-        # Выход по TP/SL
-        elif position != 0:
-            current_return = (prices[i] - entry_price) / entry_price * 100
-            if (position == 1 and (current_return >= take_profit_pct or current_return <= stop_loss_pct)) or \
-                    (position == -1 and (current_return <= -take_profit_pct or current_return >= -stop_loss_pct)):
-                signals.iloc[i] = 0
-                position = 0
-
-    return sma, ema, lwma, volatility, signals
-    """
     # 1. SMA & EMA
     sma = prices.rolling(sma_window).mean()
     ema = prices.ewm(span=ema_window, adjust=False).mean()
@@ -111,7 +43,7 @@ def ruber_bend_up_strategy(
         diff = prices.iloc[t] - ema.iloc[t - 1]
         v.iloc[t] = alpha * diff ** 2 + (1 - alpha) * v.iloc[t - 1]
         sigma.iloc[t] = np.sqrt(v.iloc[t])
-    b = 1 + δ * np.log1p(sigma)
+    b = 1 + betta * np.log1p(sigma)
 
     # 4. Динамический LWMA и sigma_lw
     lwma = pd.Series(np.nan, index=prices.index)
