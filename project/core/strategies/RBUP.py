@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 class RBUP(IStrategy):
+
     def __init__(self, settings: dict):
         self.window = settings['window']
         self.r_low = settings.get('r_low', 0.0001)

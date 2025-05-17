@@ -15,6 +15,7 @@ V0 = 0
 betta = 0.1
 
 def ruber_bend_up_strategy(
+
         prices: pd.Series,
         sma_window: int = 50,
         ema_window: int = 50,
