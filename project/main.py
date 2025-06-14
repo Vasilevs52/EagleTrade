@@ -111,6 +111,7 @@ def plot_signals(df, bars, best_long, best_short, best_meta, pset_long, pset_sho
     plt.title(f"Three Population Trading Signals - Total Profit: {total_profit:.2f}")
     plt.show()
 
+
     trades = len(long_entries) + len(short_entries)
     print(f"Trades: {trades}, Total Profit: {total_profit:.2f}")
     if trades > 0:
