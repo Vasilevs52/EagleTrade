@@ -759,6 +759,205 @@ def interpret_signals(bars, long_individual, short_individual, meta_individual,
     return df_signals
 
 
+def test_best_individuals():
+    """
+    Быстрое тестирование с лучшими найденными индивидами
+    Замените строки ниже на ваших лучших индивидов из результатов эволюции
+    """
+
+    # ВСТАВЬТЕ СЮДА ЛУЧШИХ ИНДИВИДОВ ИЗ ВАШЕГО ЗАПУСКА
+    # Примеры (замените на реальные результаты):
+    best_long_str = "scalar_gt(last_elem(vec_sub(IN0, IN1)), scalar_mean(IN2))"
+    best_short_str = "scalar_lt(scalar_mean(vec_add(IN0, IN3)), last_elem(IN1))"
+    best_meta_str = "bool_and(SIG0, bool_not(SIG1))"
+
+    print("=== TESTING BEST INDIVIDUALS ===")
+    print(f"Best Long: {best_long_str}")
+    print(f"Best Short: {best_short_str}")
+    print(f"Best Meta: {best_meta_str}")
+    print()
+
+    # Создаем индивидов из строк
+    try:
+        best_long = gp.PrimitiveTree.from_string(best_long_str, pset_long)
+        best_short = gp.PrimitiveTree.from_string(best_short_str, pset_short)
+        best_meta = gp.PrimitiveTree.from_string(best_meta_str, pset_meta)
+
+        # Компилируем функции
+        long_func = gp.compile(best_long, pset_long)
+        short_func = gp.compile(best_short, pset_short)
+        meta_func = gp.compile(best_meta, pset_meta)
+
+        # Тестируем каждую популяцию отдельно
+        print("=== INDIVIDUAL POPULATION PERFORMANCE ===")
+
+        # Тест Long популяции
+        long_fitness = evalLongTrading(best_long, bars)
+        print(f"Long Population Fitness: {long_fitness[0]:.2f}")
+
+        # Тест Short популяции
+        short_fitness = evalShortTrading(best_short, bars)
+        print(f"Short Population Fitness: {short_fitness[0]:.2f}")
+
+        # Тест Meta популяции
+        meta_fitness = evalMetaTrading(best_meta, bars, long_func, short_func)
+        print(f"Meta Population Fitness: {meta_fitness[0]:.2f}")
+
+        print("\n=== COMBINED STRATEGY RESULTS ===")
+
+        # Показываем график комбинированной стратегии
+        plot_signals(ndf, bars, best_long, best_short, best_meta,
+                     pset_long, pset_short, pset_meta)
+
+        # Детальный анализ сигналов
+        signals_df = analyze_signals_detailed(bars, best_long, best_short, best_meta,
+                                              pset_long, pset_short, pset_meta)
+
+        return best_long, best_short, best_meta, signals_df
+
+    except Exception as e:
+        print(f"Ошибка при создании индивидов: {e}")
+        print("Убедитесь, что строки индивидов корректны и соответствуют primitive sets")
+        return None, None, None, None
+
+
+def analyze_signals_detailed(bars, long_individual, short_individual, meta_individual,
+                             pset_long, pset_short, pset_meta, num_bars=50):
+    """
+    Детальный анализ работы сигналов
+    """
+    long_func = gp.compile(long_individual, pset_long)
+    short_func = gp.compile(short_individual, pset_short)
+    meta_func = gp.compile(meta_individual, pset_meta)
+
+    signals_data = []
+
+    print(f"\n=== DETAILED SIGNAL ANALYSIS (First {num_bars} bars) ===")
+    print("Bar | Price  | Long_Raw | Short_Raw | Long_Bool | Short_Bool | Meta_Raw | Action")
+    print("-" * 80)
+
+    for i, b in enumerate(bars[:num_bars]):
+        try:
+            # Сигналы от каждой популяции
+            long_raw = long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
+            short_raw = short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
+
+            # Преобразуем в булевы
+            long_bool = 1.0 if long_raw > 0 else 0.0
+            short_bool = 1.0 if short_raw > 0 else 0.0
+
+            # Финальный сигнал от мета-популяции
+            meta_raw = meta_func(long_bool, short_bool)
+
+            # Интерпретация финального сигнала
+            if meta_raw > 0.5:
+                final_action = "LONG"
+            elif meta_raw < -0.5:
+                final_action = "SHORT"
+            else:
+                final_action = "HOLD"
+
+            signals_data.append({
+                'bar': i,
+                'price': b["cur"],
+                'long_raw': long_raw,
+                'short_raw': short_raw,
+                'long_bool': long_bool,
+                'short_bool': short_bool,
+                'meta_raw': meta_raw,
+                'final_action': final_action
+            })
+
+            print(f"{i:3d} | {b['cur']:6.1f} | {long_raw:8.3f} | {short_raw:9.3f} | "
+                  f"{long_bool:9.1f} | {short_bool:10.1f} | {meta_raw:8.3f} | {final_action}")
+
+        except Exception as e:
+            signals_data.append({
+                'bar': i,
+                'price': b["cur"],
+                'long_raw': 0,
+                'short_raw': 0,
+                'long_bool': 0,
+                'short_bool': 0,
+                'meta_raw': 0,
+                'final_action': 'ERROR'
+            })
+            print(f"{i:3d} | {b['cur']:6.1f} | ERROR: {str(e)[:50]}")
+
+    # Создаем DataFrame для анализа
+    df_signals = pd.DataFrame(signals_data)
+
+    print(f"\n=== SIGNAL STATISTICS ===")
+    print("Final Action Distribution:")
+    action_counts = df_signals['final_action'].value_counts()
+    for action, count in action_counts.items():
+        print(f"  {action}: {count} ({count / len(df_signals) * 100:.1f}%)")
+
+    print(f"\nLong signals activated: {df_signals['long_bool'].sum():.0f}/{len(df_signals)} "
+          f"({df_signals['long_bool'].sum() / len(df_signals) * 100:.1f}%)")
+    print(f"Short signals activated: {df_signals['short_bool'].sum():.0f}/{len(df_signals)} "
+          f"({df_signals['short_bool'].sum() / len(df_signals) * 100:.1f}%)")
+
+    return df_signals
+
+
+def quick_test_with_strings(long_str, short_str, meta_str):
+    """
+    Быстрый тест с конкретными строками индивидов
+
+    Параметры:
+    long_str - строковое представление лучшего Long индивида
+    short_str - строковое представление лучшего Short индивида
+    meta_str - строковое представление лучшего Meta индивида
+    """
+    print("=== QUICK TEST WITH PROVIDED STRINGS ===")
+    print(f"Long: {long_str}")
+    print(f"Short: {short_str}")
+    print(f"Meta: {meta_str}")
+
+    try:
+        # Создаем индивидов
+        best_long = gp.PrimitiveTree.from_string(long_str, pset_long)
+        best_short = gp.PrimitiveTree.from_string(short_str, pset_short)
+        best_meta = gp.PrimitiveTree.from_string(meta_str, pset_meta)
+
+        # Быстрая оценка производительности
+        long_fitness = evalLongTrading(best_long, bars)
+        short_fitness = evalShortTrading(best_short, bars)
+
+        long_func = gp.compile(best_long, pset_long)
+        short_func = gp.compile(best_short, pset_short)
+        meta_fitness = evalMetaTrading(best_meta, bars, long_func, short_func)
+
+        print(f"\nPerformance:")
+        print(f"Long: {long_fitness[0]:.2f}")
+        print(f"Short: {short_fitness[0]:.2f}")
+        print(f"Meta: {meta_fitness[0]:.2f}")
+
+        # Показываем результаты
+        plot_signals(ndf, bars, best_long, best_short, best_meta,
+                     pset_long, pset_short, pset_meta)
+
+        return best_long, best_short, best_meta
+
+    except Exception as e:
+        print(f"Ошибка: {e}")
+        return None, None, None
+
+
+# Пример использования после получения лучших индивидов:
+# После запуска main() скопируй строки лучших индивидов и используй:
+#
+# test_best_individuals()  # с предустановленными в функции
+#
+# ИЛИ
+#
+# quick_test_with_strings(
+#     "твоя_строка_long_индивида",
+#     "твоя_строка_short_индивида",
+#     "твоя_строка_meta_индивида"
+# )
+
 if __name__ == "__main__":
     populations, hall_of_fames = main()
 
@@ -770,3 +969,8 @@ if __name__ == "__main__":
     long_hof, short_hof, meta_hof = hall_of_fames
     signals_df = interpret_signals(bars, long_hof[0], short_hof[0], meta_hof[0],
                                    pset_long, pset_short, pset_meta)
+    quick_test_with_strings(
+        "скопированная_строка_long",
+        "скопированная_строка_short",
+        "скопированная_строка_meta"
+    )
