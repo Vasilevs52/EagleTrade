@@ -171,97 +171,359 @@ BOOL = float  # Для мета-популяции
 def vec_add(a: VECTOR, b: VECTOR) -> VECTOR:
     return [x + y for x, y in zip(a, b)]
 
-
 def vec_sub(a: VECTOR, b: VECTOR) -> VECTOR:
     return [x - y for x, y in zip(a, b)]
 
+def vec_mul(a: VECTOR, b: VECTOR) -> VECTOR:
+    return [x * y for x, y in zip(a, b)]
+
+def vec_div(a: VECTOR, b: VECTOR) -> VECTOR:
+    return [x / (y if abs(y) > 1e-10 else 1e-10) for x, y in zip(a, b)]
 
 def vec_add_s(a: VECTOR, b: SCALAR) -> VECTOR:
     return [x + b for x in a]
 
-
 def vec_sub_s(a: VECTOR, b: SCALAR) -> VECTOR:
     return [x - b for x in a]
-
 
 def vec_mul_s(a: VECTOR, b: SCALAR) -> VECTOR:
     return [x * b for x in a]
 
+def vec_div_s(a: VECTOR, b: SCALAR) -> VECTOR:
+    divisor = b if abs(b) > 1e-10 else 1e-10
+    return [x / divisor for x in a]
 
+def vec_pow_s(a: VECTOR, b: SCALAR) -> VECTOR:
+    return [pow(abs(x), b) * (1 if x >= 0 else -1) for x in a]
+
+def vec_abs(a: VECTOR) -> VECTOR:
+    return [abs(x) for x in a]
+
+def vec_neg(a: VECTOR) -> VECTOR:
+    return [-x for x in a]
+
+def vec_sin(a: VECTOR) -> VECTOR:
+    return [math.sin(x) for x in a]
+
+def vec_cos(a: VECTOR) -> VECTOR:
+    return [math.cos(x) for x in a]
+
+def vec_exp(a: VECTOR) -> VECTOR:
+    return [math.exp(min(x, 100)) for x in a]  # Ограничиваем для избежания переполнения
+
+def vec_log(a: VECTOR) -> VECTOR:
+    return [math.log(abs(x) + 1e-10) for x in a]
+
+def vec_sqrt(a: VECTOR) -> VECTOR:
+    return [math.sqrt(abs(x)) for x in a]
+
+def vec_clip01(a: VECTOR) -> VECTOR:
+    return [min(max(x, 0.0), 1.0) for x in a]
+
+def vec_concat(a: VECTOR, b: VECTOR) -> VECTOR:
+    return a + b
+
+def vec_slice(a: VECTOR, start: SCALAR, end: SCALAR) -> VECTOR:
+    s = max(0, min(int(start), len(a)))
+    e = max(s, min(int(end), len(a)))
+    return a[s:e] if s < len(a) else []
+
+def vec_reverse(a: VECTOR) -> VECTOR:
+    return a[::-1]
+
+def vec_sort(a: VECTOR) -> VECTOR:
+    return sorted(a)
+
+def vec_max_elem(a: VECTOR) -> SCALAR:
+    return max(a) if len(a) > 0 else 0.0
+
+def vec_min_elem(a: VECTOR) -> SCALAR:
+    return min(a) if len(a) > 0 else 0.0
+
+def vec_sum(a: VECTOR) -> SCALAR:
+    return sum(a)
+
+def vec_prod(a: VECTOR) -> SCALAR:
+    result = 1.0
+    for x in a:
+        result *= x
+    return result
+
+def vec_length(a: VECTOR) -> SCALAR:
+    return float(len(a))
+
+def vec_dot(a: VECTOR, b: VECTOR) -> SCALAR:
+    return sum(x * y for x, y in zip(a, b))
+
+def vec_norm(a: VECTOR) -> SCALAR:
+    return math.sqrt(sum(x * x for x in a))
+
+def vec_distance(a: VECTOR, b: VECTOR) -> SCALAR:
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
+
+# Скалярные операции
 def scalar_mean(a: VECTOR) -> SCALAR:
     return sum(a) / len(a) if len(a) > 0 else 0.0
 
+def scalar_median(a: VECTOR) -> SCALAR:
+    if len(a) == 0:
+        return 0.0
+    sorted_a = sorted(a)
+    n = len(sorted_a)
+    if n % 2 == 0:
+        return (sorted_a[n//2 - 1] + sorted_a[n//2]) / 2
+    else:
+        return sorted_a[n//2]
+
+def scalar_std(a: VECTOR) -> SCALAR:
+    if len(a) <= 1:
+        return 0.0
+    mean = sum(a) / len(a)
+    variance = sum((x - mean) ** 2 for x in a) / len(a)
+    return math.sqrt(variance)
+
+def first_elem(a: VECTOR) -> SCALAR:
+    return a[0] if len(a) > 0 else 0.0
 
 def last_elem(a: VECTOR) -> SCALAR:
     return a[-1] if len(a) > 0 else 0.0
 
+def nth_elem(a: VECTOR, n: SCALAR) -> SCALAR:
+    idx = int(n) % len(a) if len(a) > 0 else 0
+    return a[idx] if len(a) > 0 else 0.0
 
 def sum_gt(a: VECTOR, b: VECTOR) -> SCALAR:
     return 1.0 if sum(a) > sum(b) else 0.0
 
-
 def mean_gt(a: VECTOR, b: SCALAR) -> SCALAR:
     mean_a = sum(a) / len(a) if len(a) > 0 else 0.0
     return 1.0 if mean_a > b else 0.0
-
 
 def rnd_mean_gt(a: VECTOR, low: SCALAR, high: SCALAR) -> SCALAR:
     r = random.uniform(low, high)
     mean_a = sum(a) / len(a) if len(a) > 0 else 0.0
     return 1.0 if mean_a > r else 0.0
 
+def scalar_add(a: SCALAR, b: SCALAR) -> SCALAR:
+    return a + b
 
-def if_else(cond: SCALAR, a: VECTOR, b: VECTOR) -> VECTOR:
-    return a if cond > 0 else b
+def scalar_sub(a: SCALAR, b: SCALAR) -> SCALAR:
+    return a - b
 
+def scalar_mul(a: SCALAR, b: SCALAR) -> SCALAR:
+    return a * b
+
+def scalar_div(a: SCALAR, b: SCALAR) -> SCALAR:
+    return a / b if abs(b) > 1e-10 else a / 1e-10
+
+def scalar_pow(a: SCALAR, b: SCALAR) -> SCALAR:
+    return pow(abs(a), b) * (1 if a >= 0 else -1)
+
+def scalar_mod(a: SCALAR, b: SCALAR) -> SCALAR:
+    return a % b if abs(b) > 1e-10 else 0.0
+
+def scalar_abs(a: SCALAR) -> SCALAR:
+    return abs(a)
+
+def scalar_sin(a: SCALAR) -> SCALAR:
+    return math.sin(a)
+
+def scalar_cos(a: SCALAR) -> SCALAR:
+    return math.cos(a)
+
+def scalar_tan(a: SCALAR) -> SCALAR:
+    return math.tan(a)
+
+def scalar_exp(a: SCALAR) -> SCALAR:
+    return math.exp(min(a, 100))
+
+def scalar_sqrt(a: SCALAR) -> SCALAR:
+    return math.sqrt(abs(a))
+
+def scalar_floor(a: SCALAR) -> SCALAR:
+    return float(math.floor(a))
+
+def scalar_ceil(a: SCALAR) -> SCALAR:
+    return float(math.ceil(a))
+
+def scalar_round(a: SCALAR) -> SCALAR:
+    return float(round(a))
 
 def scalar_gt(a: SCALAR, b: SCALAR) -> SCALAR:
     return 1.0 if a > b else 0.0
 
-
 def scalar_lt(a: SCALAR, b: SCALAR) -> SCALAR:
     return 1.0 if a < b else 0.0
 
+def scalar_gte(a: SCALAR, b: SCALAR) -> SCALAR:
+    return 1.0 if a >= b else 0.0
+
+def scalar_lte(a: SCALAR, b: SCALAR) -> SCALAR:
+    return 1.0 if a <= b else 0.0
 
 def scalar_eq(a: SCALAR, b: SCALAR) -> SCALAR:
     return 1.0 if abs(a - b) < 1e-6 else 0.0
 
+def scalar_neq(a: SCALAR, b: SCALAR) -> SCALAR:
+    return 1.0 if abs(a - b) >= 1e-6 else 0.0
 
 def scalar_pos(a: SCALAR) -> SCALAR:
     return 1.0 if a > 0 else 0.0
 
-
 def scalar_neg(a: SCALAR) -> SCALAR:
     return 1.0 if a < 0 else 0.0
 
+def scalar_zero(a: SCALAR) -> SCALAR:
+    return 1.0 if abs(a) < 1e-6 else 0.0
 
 def scalar_clip01(a: SCALAR) -> SCALAR:
     return min(max(a, 0.0), 1.0)
 
+def scalar_clip(a: SCALAR, low: SCALAR, high: SCALAR) -> SCALAR:
+    return min(max(a, low), high)
 
 def scalar_log(a: SCALAR) -> SCALAR:
     return math.log(abs(a) + 1e-10)
 
+def scalar_sigmoid(a: SCALAR) -> SCALAR:
+    return 1.0 / (1.0 + math.exp(-min(max(a, -100), 100)))
 
-# Примитивы для мета-популяции
+def scalar_tanh(a: SCALAR) -> SCALAR:
+    return math.tanh(a)
+
+def scalar_random() -> SCALAR:
+    return random.random()
+
+def scalar_random_range(low: SCALAR, high: SCALAR) -> SCALAR:
+    return random.uniform(low, high)
+
+def scalar_random_gauss(mean: SCALAR, std: SCALAR) -> SCALAR:
+    return random.gauss(mean, std)
+
+# Условные операции
+def if_else(cond: SCALAR, a: VECTOR, b: VECTOR) -> VECTOR:
+    return a if cond > 0 else b
+
+def scalar_if_else(cond: SCALAR, a: SCALAR, b: SCALAR) -> SCALAR:
+    return a if cond > 0 else b
+
+def vec_if_else_elem(cond: VECTOR, a: VECTOR, b: VECTOR) -> VECTOR:
+    return [av if cv > 0 else bv for cv, av, bv in zip(cond, a, b)]
+
+# Булевые операции
 def bool_and(a: BOOL, b: BOOL) -> BOOL:
     return 1.0 if (a > 0.5 and b > 0.5) else 0.0
-
 
 def bool_or(a: BOOL, b: BOOL) -> BOOL:
     return 1.0 if (a > 0.5 or b > 0.5) else 0.0
 
-
 def bool_not(a: BOOL) -> BOOL:
     return 1.0 if a <= 0.5 else 0.0
-
 
 def bool_xor(a: BOOL, b: BOOL) -> BOOL:
     return 1.0 if ((a > 0.5) != (b > 0.5)) else 0.0
 
+def bool_nand(a: BOOL, b: BOOL) -> BOOL:
+    return bool_not(bool_and(a, b))
+
+def bool_nor(a: BOOL, b: BOOL) -> BOOL:
+    return bool_not(bool_or(a, b))
 
 def bool_if_then_else(cond: BOOL, a: BOOL, b: BOOL) -> BOOL:
     return a if cond > 0.5 else b
+
+def bool_from_scalar(a: SCALAR) -> BOOL:
+    return 1.0 if a > 0 else 0.0
+
+def scalar_from_bool(a: BOOL) -> SCALAR:
+    return a
+
+# Векторные булевы операции
+def vec_bool_and(a: VECTOR, b: VECTOR) -> VECTOR:
+    return [bool_and(x, y) for x, y in zip(a, b)]
+
+def vec_bool_or(a: VECTOR, b: VECTOR) -> VECTOR:
+    return [bool_or(x, y) for x, y in zip(a, b)]
+
+def vec_bool_not(a: VECTOR) -> VECTOR:
+    return [bool_not(x) for x in a]
+
+def vec_bool_xor(a: VECTOR, b: VECTOR) -> VECTOR:
+    return [bool_xor(x, y) for x, y in zip(a, b)]
+
+# Операции сравнения векторов
+def vec_gt(a: VECTOR, b: VECTOR) -> VECTOR:
+    return [scalar_gt(x, y) for x, y in zip(a, b)]
+
+def vec_lt(a: VECTOR, b: VECTOR) -> VECTOR:
+    return [scalar_lt(x, y) for x, y in zip(a, b)]
+
+def vec_gte(a: VECTOR, b: VECTOR) -> VECTOR:
+    return [scalar_gte(x, y) for x, y in zip(a, b)]
+
+def vec_lte(a: VECTOR, b: VECTOR) -> VECTOR:
+    return [scalar_lte(x, y) for x, y in zip(a, b)]
+
+def vec_eq(a: VECTOR, b: VECTOR) -> VECTOR:
+    return [scalar_eq(x, y) for x, y in zip(a, b)]
+
+def vec_neq(a: VECTOR, b: VECTOR) -> VECTOR:
+    return [scalar_neq(x, y) for x, y in zip(a, b)]
+
+def vec_gt_s(a: VECTOR, b: SCALAR) -> VECTOR:
+    return [scalar_gt(x, b) for x in a]
+
+def vec_lt_s(a: VECTOR, b: SCALAR) -> VECTOR:
+    return [scalar_lt(x, b) for x in a]
+
+def vec_eq_s(a: VECTOR, b: SCALAR) -> VECTOR:
+    return [scalar_eq(x, b) for x in a]
+
+# Создание векторов
+def vec_create_zeros(size: SCALAR) -> VECTOR:
+    return [0.0] * max(0, int(size))
+
+def vec_create_ones(size: SCALAR) -> VECTOR:
+    return [1.0] * max(0, int(size))
+
+def vec_create_range(start: SCALAR, end: SCALAR) -> VECTOR:
+    s, e = int(start), int(end)
+    return list(range(s, e)) if s < e else []
+
+def vec_create_random(size: SCALAR) -> VECTOR:
+    return [random.random() for _ in range(max(0, int(size)))]
+
+def vec_create_const(size: SCALAR, value: SCALAR) -> VECTOR:
+    return [value] * max(0, int(size))
+
+# Агрегатные операции
+def vec_all_gt(a: VECTOR, b: SCALAR) -> SCALAR:
+    return 1.0 if all(x > b for x in a) else 0.0
+
+def vec_any_gt(a: VECTOR, b: SCALAR) -> SCALAR:
+    return 1.0 if any(x > b for x in a) else 0.0
+
+def vec_count_gt(a: VECTOR, b: SCALAR) -> SCALAR:
+    return float(sum(1 for x in a if x > b))
+
+def vec_all_pos(a: VECTOR) -> SCALAR:
+    return 1.0 if all(x > 0 for x in a) else 0.0
+
+def vec_any_neg(a: VECTOR) -> SCALAR:
+    return 1.0 if any(x < 0 for x in a) else 0.0
+
+def vec_count_zeros(a: VECTOR) -> SCALAR:
+    return float(sum(1 for x in a if abs(x) < 1e-6))
+
+# Преобразования типов
+def vec_to_bool(a: VECTOR) -> VECTOR:
+    return [bool_from_scalar(x) for x in a]
+
+def bool_vec_to_scalar(a: VECTOR) -> SCALAR:
+    return 1.0 if any(x > 0.5 for x in a) else 0.0
+
+def bool_vec_all_true(a: VECTOR) -> SCALAR:
+    return 1.0 if all(x > 0.5 for x in a) else 0.0
 
 
 # ----- 3. Настройка DEAP GP для трех популяций -----
