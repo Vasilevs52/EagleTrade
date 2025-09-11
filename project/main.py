@@ -1,3 +1,4 @@
+
 import operator
 import random
 import statistics
@@ -9,6 +10,7 @@ from deap import algorithms
 import pandas as pd
 from binance.client import Client
 import matplotlib.pyplot as plt
+
 
 
 def plot_signals(df, bars, best_long, best_short, best_meta, pset_long, pset_short, pset_meta):
@@ -157,9 +159,9 @@ def build_input_vectors(df: pd.DataFrame, min_window: int = 50):
 
 
 # Подготовка данных
-ndf = get_history_data("BTCUSDT", "1h", "01-10-2020", "06-01-2020")
-ndf = add_indicators(ndf, window=50)
-bars = build_input_vectors(ndf, min_window=50)
+ndf = get_history_data("BTCUSDT", "1h", "11-11-2021", "01-01-2022")
+ndf = add_indicators(ndf, window=200)
+bars = build_input_vectors(ndf, min_window=200)
 
 # ----- 2. Определение типов и примитивов GP -----
 VECTOR = list
@@ -866,7 +868,7 @@ def main():
     # Создаем популяции
     pop_long = toolbox_long.population(n=100)
     pop_short = toolbox_short.population(n=100)
-    pop_meta = toolbox_meta.population(n=100)
+    pop_meta = toolbox_meta.population(n=50)
 
     # Hall of Fame для каждой популяции
     hof_long = tools.HallOfFame(3)
@@ -1219,20 +1221,268 @@ def quick_test_with_strings(long_str, short_str, meta_str):
 #     "твоя_строка_short_индивида",
 #     "твоя_строка_meta_индивида"
 # )
+def test_on_multiple_periods(best_long, best_short, best_meta, periods):
+    """
+    Тестирует лучших индивидов на различных временных периодах
+    """
+    results = []
+
+    for symbol, interval, start_date, end_date in periods:
+        print(f"\nTesting on period: {start_date} to {end_date}")
+
+        # Загрузка и подготовка данных
+        df = get_history_data(symbol, interval, start_date, end_date)
+        df = add_indicators(df, window=50)
+        bars = build_input_vectors(df, min_window=50)
+
+        # Компиляция функций
+        long_func = gp.compile(best_long, pset_long)
+        short_func = gp.compile(best_short, pset_short)
+        meta_func = gp.compile(best_meta, pset_meta)
+
+        # Запуск тестирования
+        profit, trades_count = evaluate_combined_strategy(
+            bars, long_func, short_func, meta_func
+        )
+
+        # Расчёт дополнительных метрик
+        profit_per_trade = profit / trades_count if trades_count > 0 else 0
+        annual_return = (profit / df['Price'].iloc[0]) * (365 / len(df)) * 100
+
+        results.append({
+            'period': f"{start_date} to {end_date}",
+            'profit': profit,
+            'trades': trades_count,
+            'profit_per_trade': profit_per_trade,
+            'annual_return': annual_return
+        })
+
+        print(f"Profit: {profit:.2f}")
+        print(f"Trades: {trades_count}")
+        print(f"Profit per trade: {profit_per_trade:.2f}")
+        print(f"Annual return: {annual_return:.2f}%")
+
+    return pd.DataFrame(results)
+
+
+def evaluate_combined_strategy(bars, long_func, short_func, meta_func):
+    """
+    Оценка комбинированной стратегии без визуализации
+    """
+    profit = 0.0
+    position = 0
+    entry_price = 0.0
+    commission = 0.001
+    trades_count = 0
+
+    for i, b in enumerate(bars):
+        try:
+            # Получаем сигналы от каждой популяции
+            long_sig = long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
+            short_sig = short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
+
+            long_bool = 1.0 if long_sig > 0 else 0.0
+            short_bool = 1.0 if short_sig > 0 else 0.0
+
+            # Мета-решение
+            final_sig = meta_func(long_bool, short_bool)
+
+            if final_sig > 0.5:
+                sig = 1  # Long
+            elif final_sig < -0.5:
+                sig = -1  # Short
+            else:
+                sig = 0  # Hold
+        except:
+            sig = 0
+
+        # Торговая логика
+        if position == 1 and sig <= 0:  # Закрываем лонг
+            trade_profit = (b["cur"] - entry_price) - commission * (entry_price + b["cur"])
+            profit += trade_profit
+            position = 0
+            trades_count += 1
+        elif position == -1 and sig >= 0:  # Закрываем шорт
+            trade_profit = (entry_price - b["cur"]) - commission * (entry_price + b["cur"])
+            profit += trade_profit
+            position = 0
+            trades_count += 1
+
+        if position == 0:
+            if sig > 0:  # Открываем лонг
+                position = 1
+                entry_price = b["cur"]
+            elif sig < 0:  # Открываем шорт
+                position = -1
+                entry_price = b["cur"]
+
+    # Закрываем финальную позицию
+    if position != 0 and bars:
+        final_price = bars[-1]["cur"]
+        if position == 1:
+            trade_profit = (final_price - entry_price) - commission * (entry_price + final_price)
+        else:
+            trade_profit = (entry_price - final_price) - commission * (entry_price + final_price)
+        profit += trade_profit
+        trades_count += 1
+
+    return profit, trades_count
+
+def test_on_multiple_periods_with_plots(best_long, best_short, best_meta, periods):
+    """
+    Тестирует лучших индивидов на различных временных периодах с построением графиков
+    """
+    results = []
+
+    for i, (symbol, interval, start_date, end_date) in enumerate(periods):
+        print(f"\nTesting on period {i + 1}: {start_date} to {end_date}")
+        print("=" * 50)
+
+        # Загрузка и подготовка данных
+        df = get_history_data(symbol, interval, start_date, end_date)
+        df = add_indicators(df, window=50)
+        bars = build_input_vectors(df, min_window=50)
+
+        # Компиляция функций
+        long_func = gp.compile(best_long, pset_long)
+        short_func = gp.compile(best_short, pset_short)
+        meta_func = gp.compile(best_meta, pset_meta)
+
+        # Запуск тестирования с визуализацией
+        profit, trades_count = evaluate_combined_strategy(
+            bars, long_func, short_func, meta_func
+        )
+
+        # Расчёт дополнительных метрик
+        profit_per_trade = profit / trades_count if trades_count > 0 else 0
+        annual_return = (profit / df['Price'].iloc[0]) * (365 / len(df)) * 100
+
+        results.append({
+            'period': f"{start_date} to {end_date}",
+            'profit': profit,
+            'trades': trades_count,
+            'profit_per_trade': profit_per_trade,
+            'annual_return': annual_return
+        })
+
+        print(f"Profit: {profit:.2f}")
+        print(f"Trades: {trades_count}")
+        print(f"Profit per trade: {profit_per_trade:.2f}")
+        print(f"Annual return: {annual_return:.2f}%")
+
+        # Построение графика для этого периода
+        plot_period_signals(df, bars, long_func, short_func, meta_func, profit)
+
+    return pd.DataFrame(results)
+
+
+def plot_period_signals(df, bars, long_func, short_func, meta_func, total_profit):
+    """
+    Строит график торговых сигналов для конкретного периода
+    """
+    long_entries, long_exits = [], []
+    short_entries, short_exits = [], []
+    pos = None
+    entry_price = 0.0
+    commission = 0.001
+
+    for i, b in enumerate(bars):
+        try:
+            # Получаем сигналы от каждой популяции
+            long_sig = long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
+            short_sig = short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
+
+            # Нормализуем к булевым значениям
+            long_bool = 1.0 if long_sig > 0 else 0.0
+            short_bool = 1.0 if short_sig > 0 else 0.0
+
+            # Мета-популяция принимает решение
+            final_sig = meta_func(long_bool, short_bool)
+
+            # Интерпретируем финальный сигнал
+            if final_sig > 0.5:
+                sig = 1  # Long
+            elif final_sig < -0.5:
+                sig = -1  # Short
+            else:
+                sig = 0  # Hold
+
+        except:
+            sig = 0
+
+        # Логика торговли
+        if pos == "long":
+            if sig == -1:  # Выход из лонга
+                profit = (b["cur"] - entry_price) - commission * (entry_price + b["cur"])
+                long_exits.append((i, b["cur"]))
+                pos = None
+        elif pos == "short":
+            if sig == 1:  # Выход из шорта
+                profit = (entry_price - b["cur"]) - commission * (entry_price + b["cur"])
+                short_exits.append((i, b["cur"]))
+                pos = None
+        else:  # pos is None
+            if sig == 1:  # Вход в лонг
+                long_entries.append((i, b["cur"]))
+                entry_price = b["cur"]
+                pos = "long"
+            elif sig == -1:  # Вход в шорт
+                short_entries.append((i, b["cur"]))
+                entry_price = b["cur"]
+                pos = "short"
+
+    # Закрываем последнюю позицию
+    if pos == "long" and bars:
+        profit = (bars[-1]["cur"] - entry_price) - commission * (entry_price + bars[-1]["cur"])
+        long_exits.append((len(bars) - 1, bars[-1]["cur"]))
+    elif pos == "short" and bars:
+        profit = (entry_price - bars[-1]["cur"]) - commission * (entry_price + bars[-1]["cur"])
+        short_exits.append((len(bars) - 1, bars[-1]["cur"]))
+
+    # Построение графика
+    offset = len(df) - len(bars)
+    prices = df["Price"].iloc[offset:].values
+    plt.figure(figsize=(16, 8))
+    plt.plot(prices, label="Price", color='black', linewidth=1)
+
+    if long_entries:
+        xs, ys = zip(*long_entries)
+        plt.scatter(xs, ys, marker="^", s=100, color='green', label="LONG ENTRY")
+    if long_exits:
+        xs, ys = zip(*long_exits)
+        plt.scatter(xs, ys, marker="v", s=100, color='red', label="LONG EXIT")
+
+    if short_entries:
+        xs, ys = zip(*short_entries)
+        plt.scatter(xs, ys, marker="v", s=100, color='orange', label="SHORT ENTRY")
+    if short_exits:
+        xs, ys = zip(*short_exits)
+        plt.scatter(xs, ys, marker="^", s=100, color='blue', label="SHORT EXIT")
+
+    plt.legend()
+    plt.grid(True)
+    plt.title(f"Trading Signals - Total Profit: {total_profit:.2f}")
+    plt.show()
+
 
 if __name__ == "__main__":
     populations, hall_of_fames = main()
 
-    # Дополнительный анализ сигналов
-    print("\n" + "=" * 50)
-    print("DETAILED SIGNAL INTERPRETATION")
-    print("=" * 50)
+    # Получаем лучших индивидов
+    best_long = hall_of_fames[0][0]
+    best_short = hall_of_fames[1][0]
+    best_meta = hall_of_fames[2][0]
 
-    long_hof, short_hof, meta_hof = hall_of_fames
-    signals_df = interpret_signals(bars, long_hof[0], short_hof[0], meta_hof[0],
-                                   pset_long, pset_short, pset_meta)
-    quick_test_with_strings(
-        "скопированная_строка_long",
-        "скопированная_строка_short",
-        "скопированная_строка_meta"
-    )
+    # Периоды для тестирования
+    test_periods = [
+        ("BTCUSDT", "1h", "01-10-2021", "01-01-2022"),
+        ("BTCUSDT", "1h", "01-10-2022", "01-01-2023"),
+        ("BTCUSDT", "1h", "01-10-2023", "01-01-2024")
+    ]
+
+    # Запуск тестирования с графиками
+    results_df = test_on_multiple_periods_with_plots(best_long, best_short, best_meta, test_periods)
+
+    # Вывод результатов
+    print("\n=== RESULTS SUMMARY ===")
+    print(results_df.to_string(index=False))
