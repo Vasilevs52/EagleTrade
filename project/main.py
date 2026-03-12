@@ -1,4 +1,3 @@
-
 import operator
 import random
 import statistics
@@ -11,6 +10,570 @@ import pandas as pd
 from binance.client import Client
 import matplotlib.pyplot as plt
 
+from binance.client import Client
+import pandas as pd
+import numpy as np
+from dataclasses import dataclass
+from typing import List, Dict, Optional
+import matplotlib.pyplot as plt
+from datetime import datetime
+
+
+class BinanceBroker():
+    @staticmethod
+    def get_history_data(symbols: list, interval: str, start_date: str, end_date: str):
+        client = Client()
+        columns = [
+            "Open Time",
+            "Open",
+            "High",
+            "Low",
+            "Close",
+            "Volume",
+            "Close Time",
+            "Quote Asset Volume",
+            "Number of Trades",
+            "Taker Buy Base Volume",
+            "Taker Buy Quote Volume",
+            "Ignore"
+        ]
+
+        arr_df = []
+        for symbol in symbols:
+            data = client.get_historical_klines(symbol=symbol,
+                                                interval=interval,
+                                                start_str=start_date,
+                                                end_str=end_date)
+            df = pd.DataFrame(data, columns=columns, dtype=float)
+            df["Open Time"] = pd.to_datetime(df["Open Time"], unit="ms")
+            df["Close Time"] = pd.to_datetime(df["Close Time"], unit="ms")
+            df["Symbol"] = symbol
+            arr_df.append(df)
+
+        if len(arr_df) == 1:
+            return arr_df[0]
+        else:
+            df = pd.concat(arr_df, axis=0, ignore_index=True)
+            return df
+
+
+@dataclass
+class Trade:
+    """Класс для представления одной сделки"""
+    timestamp: datetime
+    action: str  # 'BUY', 'SELL', 'CLOSE'
+    price: float
+    quantity: float
+    balance_before: float
+    balance_after: float
+    pnl: float = 0.0
+    position_type: str = "FLAT"  # 'LONG', 'SHORT', 'FLAT'
+
+
+class TradingSimulator:
+    """Симулятор торговли с тестовым балансом"""
+
+    def __init__(self, initial_balance: float = 10000, commission: float = 0.001):
+        self.initial_balance = initial_balance
+        self.balance = initial_balance
+        self.commission = commission
+        self.position = 0.0  # Текущая позиция
+        self.position_price = 0.0  # Цена входа в позицию
+        self.position_type = "FLAT"  # 'LONG', 'SHORT', 'FLAT'
+        self.trades: List[Trade] = []
+        self.equity_curve = []
+        self.max_balance = initial_balance
+        self.max_drawdown = 0.0
+
+    def reset(self):
+        """Сброс симулятора"""
+        self.balance = self.initial_balance
+        self.position = 0.0
+        self.position_price = 0.0
+        self.position_type = "FLAT"
+        self.trades = []
+        self.equity_curve = []
+        self.max_balance = self.initial_balance
+        self.max_drawdown = 0.0
+
+    def execute_trade(self, timestamp: datetime, action: str, price: float,
+                      risk_percent: float = 0.02) -> Optional[Trade]:
+        """
+        Выполнение сделки
+
+        Args:
+            timestamp: Время сделки
+            action: 'LONG', 'SHORT', 'HOLD'
+            price: Цена
+            risk_percent: Процент риска от баланса
+        """
+        balance_before = self.balance
+        pnl = 0.0
+
+        if action == 'HOLD' or self.balance <= 0:
+            self.equity_curve.append(self.balance)
+            return None
+
+        if action == 'LONG':
+            if self.position_type == 'SHORT':
+                # Закрываем короткую позицию
+                pnl = self.position * (self.position_price - price)
+                self.balance += pnl
+                commission_cost = abs(self.position * price * self.commission)
+                self.balance -= commission_cost
+
+                # Открываем длинную позицию
+                risk_amount = self.balance * risk_percent
+                quantity = risk_amount / price
+                self.position = quantity
+                self.position_price = price
+                self.position_type = 'LONG'
+                commission_cost += quantity * price * self.commission
+                self.balance -= commission_cost
+
+            elif self.position_type == 'FLAT':
+                # Открываем длинную позицию
+                risk_amount = self.balance * risk_percent
+                quantity = risk_amount / price
+                commission_cost = quantity * price * self.commission
+                self.balance -= commission_cost
+                self.position = quantity
+                self.position_price = price
+                self.position_type = 'LONG'
+
+        elif action == 'SHORT':
+            if self.position_type == 'LONG':
+                # Закрываем длинную позицию
+                pnl = self.position * (price - self.position_price)
+                self.balance += pnl
+                commission_cost = abs(self.position * price * self.commission)
+                self.balance -= commission_cost
+
+                # Открываем короткую позицию
+                risk_amount = self.balance * risk_percent
+                quantity = risk_amount / price
+                self.position = -quantity
+                self.position_price = price
+                self.position_type = 'SHORT'
+                commission_cost += quantity * price * self.commission
+                self.balance -= commission_cost
+
+            elif self.position_type == 'FLAT':
+                # Открываем короткую позицию
+                risk_amount = self.balance * risk_percent
+                quantity = risk_amount / price
+                commission_cost = quantity * price * self.commission
+                self.balance -= commission_cost
+                self.position = -quantity
+                self.position_price = price
+                self.position_type = 'SHORT'
+
+        # Обновляем статистику
+        self.max_balance = max(self.max_balance, self.balance)
+        current_drawdown = (self.max_balance - self.balance) / self.max_balance
+        self.max_drawdown = max(self.max_drawdown, current_drawdown)
+
+        self.equity_curve.append(self.balance)
+
+        # Создаем запись о сделке
+        trade = Trade(
+            timestamp=timestamp,
+            action=action,
+            price=price,
+            quantity=abs(self.position),
+            balance_before=balance_before,
+            balance_after=self.balance,
+            pnl=pnl,
+            position_type=self.position_type
+        )
+
+        self.trades.append(trade)
+        return trade
+
+    def close_position(self, timestamp: datetime, price: float) -> Optional[Trade]:
+        """Закрытие текущей позиции"""
+        if self.position_type == 'FLAT':
+            return None
+
+        balance_before = self.balance
+
+        if self.position_type == 'LONG':
+            pnl = self.position * (price - self.position_price)
+        else:  # SHORT
+            pnl = abs(self.position) * (self.position_price - price)
+
+        self.balance += pnl
+        commission_cost = abs(self.position * price * self.commission)
+        self.balance -= commission_cost
+
+        trade = Trade(
+            timestamp=timestamp,
+            action='CLOSE',
+            price=price,
+            quantity=abs(self.position),
+            balance_before=balance_before,
+            balance_after=self.balance,
+            pnl=pnl,
+            position_type=self.position_type
+        )
+
+        self.trades.append(trade)
+
+        # Сброс позиции
+        self.position = 0.0
+        self.position_price = 0.0
+        self.position_type = 'FLAT'
+
+        self.equity_curve.append(self.balance)
+        return trade
+
+    def get_unrealized_pnl(self, current_price: float) -> float:
+        """Получение нереализованной прибыли/убытка"""
+        if self.position_type == 'FLAT':
+            return 0.0
+        elif self.position_type == 'LONG':
+            return self.position * (current_price - self.position_price)
+        else:  # SHORT
+            return abs(self.position) * (self.position_price - current_price)
+
+    def get_statistics(self) -> Dict:
+        """Получение статистики торговли"""
+        if not self.trades:
+            return {}
+
+        trades_df = pd.DataFrame([
+            {
+                'timestamp': t.timestamp,
+                'action': t.action,
+                'price': t.price,
+                'quantity': t.quantity,
+                'pnl': t.pnl,
+                'balance': t.balance_after
+            } for t in self.trades
+        ])
+
+        profitable_trades = trades_df[trades_df['pnl'] > 0]
+        losing_trades = trades_df[trades_df['pnl'] < 0]
+
+        total_return = ((self.balance - self.initial_balance) / self.initial_balance) * 100
+
+        stats = {
+            'Initial Balance': self.initial_balance,
+            'Final Balance': self.balance,
+            'Total Return (%)': total_return,
+            'Max Drawdown (%)': self.max_drawdown * 100,
+            'Total Trades': len(self.trades),
+            'Profitable Trades': len(profitable_trades),
+            'Losing Trades': len(losing_trades),
+            'Win Rate (%)': (len(profitable_trades) / len(self.trades)) * 100 if self.trades else 0,
+            'Avg Profit': profitable_trades['pnl'].mean() if not profitable_trades.empty else 0,
+            'Avg Loss': losing_trades['pnl'].mean() if not losing_trades.empty else 0,
+            'Profit Factor': abs(
+                profitable_trades['pnl'].sum() / losing_trades['pnl'].sum()) if not losing_trades.empty and
+                                                                                losing_trades[
+                                                                                    'pnl'].sum() != 0 else float('inf')
+        }
+
+        return stats
+
+
+def backtest_strategy(df: pd.DataFrame, long_func, short_func, meta_func,
+                      simulator: TradingSimulator, verbose: bool = True):
+    """
+    Бэктест стратегии с симулятором
+
+    Args:
+        df: DataFrame с данными OHLCV
+        long_func, short_func, meta_func: Скомпилированные функции стратегий
+        simulator: Объект TradingSimulator
+        verbose: Выводить ли детали
+    """
+    simulator.reset()
+    signals = []
+
+    # Подготовка индикаторов (как в оригинальном коде)
+    df_copy = df.copy()
+    df_copy['SMA'] = df_copy['Close'].rolling(window=10).mean()
+    df_copy['EMA'] = df_copy['Close'].ewm(span=10).mean()
+    df_copy['LWMA'] = df_copy['Close'].rolling(window=10).apply(
+        lambda x: (x * np.arange(1, len(x) + 1)).sum() / np.arange(1, len(x) + 1).sum()
+    )
+
+    # Создание массива баров как в оригинальном коде
+    bars = []
+    for i in range(len(df_copy)):
+        if i < 10:  # Пропускаем первые 10 баров из-за индикаторов
+            continue
+
+        price_vector = df_copy['Close'].iloc[max(0, i - 9):i + 1].values
+        sma_vector = df_copy['SMA'].iloc[max(0, i - 9):i + 1].values
+        ema_vector = df_copy['EMA'].iloc[max(0, i - 9):i + 1].values
+        lwma_vector = df_copy['LWMA'].iloc[max(0, i - 9):i + 1].values
+        current_price = df_copy['Close'].iloc[i]
+
+        bar = {
+            "price": price_vector,
+            "sma": sma_vector,
+            "ema": ema_vector,
+            "lwma": lwma_vector,
+            "cur": current_price
+        }
+        bars.append(bar)
+
+    if verbose:
+        print(f"Starting backtest with {len(bars)} bars...")
+        print(f"Initial balance: ${simulator.initial_balance:,.2f}")
+
+    # Основной цикл бэктеста
+    for i, bar in enumerate(bars):
+        try:
+            timestamp = df_copy.iloc[i + 10]['Open Time'] if 'Open Time' in df_copy.columns else datetime.now()
+            current_price = bar['cur']
+
+            # Получение сигналов
+            long_raw = long_func(bar["price"], bar["sma"], bar["ema"], bar["lwma"], bar["cur"])
+            short_raw = short_func(bar["price"], bar["sma"], bar["ema"], bar["lwma"], bar["cur"])
+
+            long_bool = 1.0 if long_raw > 0 else 0.0
+            short_bool = 1.0 if short_raw > 0 else 0.0
+
+            meta_raw = meta_func(long_bool, short_bool)
+
+            # Определение действия
+            if meta_raw > 0.5:
+                action = "LONG"
+            elif meta_raw < -0.5:
+                action = "SHORT"
+            else:
+                action = "HOLD"
+
+            # Выполнение сделки
+            trade = simulator.execute_trade(timestamp, action, current_price)
+
+            # Сохранение информации о сигнале
+            unrealized_pnl = simulator.get_unrealized_pnl(current_price)
+            signals.append({
+                'timestamp': timestamp,
+                'price': current_price,
+                'long_raw': long_raw,
+                'short_raw': short_raw,
+                'long_bool': long_bool,
+                'short_bool': short_bool,
+                'meta_raw': meta_raw,
+                'action': action,
+                'balance': simulator.balance,
+                'position_type': simulator.position_type,
+                'unrealized_pnl': unrealized_pnl,
+                'trade_executed': trade is not None
+            })
+
+        except Exception as e:
+            if verbose:
+                print(f"Error at bar {i}: {e}")
+            signals.append({
+                'timestamp': datetime.now(),
+                'price': bar['cur'],
+                'long_raw': 0,
+                'short_raw': 0,
+                'long_bool': 0,
+                'short_bool': 0,
+                'meta_raw': 0,
+                'action': 'ERROR',
+                'balance': simulator.balance,
+                'position_type': simulator.position_type,
+                'unrealized_pnl': 0,
+                'trade_executed': False
+            })
+
+    # Закрываем позицию в конце
+    if simulator.position_type != 'FLAT':
+        final_price = bars[-1]['cur']
+        final_timestamp = signals[-1]['timestamp']
+        simulator.close_position(final_timestamp, final_price)
+
+    signals_df = pd.DataFrame(signals)
+
+    if verbose:
+        stats = simulator.get_statistics()
+        print(f"\n=== BACKTEST RESULTS ===")
+        for key, value in stats.items():
+            if isinstance(value, float):
+                print(f"{key}: {value:.2f}")
+            else:
+                print(f"{key}: {value}")
+
+    return signals_df, simulator.get_statistics()
+
+
+def plot_backtest_results(df: pd.DataFrame, signals_df: pd.DataFrame, simulator: TradingSimulator):
+    """Построение графиков результатов бэктеста"""
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 12))
+
+    # График цены и сигналов
+    ax1.plot(df['Close'].values, label='Price', alpha=0.7)
+
+    # Отмечаем сделки
+    for trade in simulator.trades:
+        if hasattr(trade, 'timestamp'):
+            idx = signals_df[signals_df['timestamp'] == trade.timestamp].index
+            if len(idx) > 0:
+                idx = idx[0]
+                if trade.action == 'LONG':
+                    ax1.scatter(idx, trade.price, color='green', marker='^', s=100, label='Long' if idx == 0 else "")
+                elif trade.action == 'SHORT':
+                    ax1.scatter(idx, trade.price, color='red', marker='v', s=100, label='Short' if idx == 0 else "")
+                elif trade.action == 'CLOSE':
+                    ax1.scatter(idx, trade.price, color='blue', marker='x', s=100, label='Close' if idx == 0 else "")
+
+    ax1.set_title('Price and Trading Signals')
+    ax1.set_ylabel('Price')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+
+    # График баланса
+    ax2.plot(signals_df['balance'].values, label='Balance', color='blue')
+    ax2.set_title('Account Balance')
+    ax2.set_ylabel('Balance ($)')
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+
+    # График сигналов
+    ax3.plot(signals_df['meta_raw'].values, label='Meta Signal', color='purple')
+    ax3.axhline(y=0.5, color='green', linestyle='--', alpha=0.5, label='Long Threshold')
+    ax3.axhline(y=-0.5, color='red', linestyle='--', alpha=0.5, label='Short Threshold')
+    ax3.set_title('Meta Strategy Signals')
+    ax3.set_ylabel('Signal Strength')
+    ax3.set_xlabel('Time')
+    ax3.legend()
+    ax3.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+
+
+# Функции интеграции с оригинальным кодом
+def evaluate_with_balance(individual, bars, strategy_type, pset, simulator=None):
+    """
+    Оценочная функция с учетом баланса - заменяет evalLongTrading и evalShortTrading
+    """
+    if simulator is None:
+        simulator = TradingSimulator(initial_balance=10000, commission=0.001)
+
+    simulator.reset()
+
+    try:
+        from deap import gp
+        func = gp.compile(individual, pset)
+
+        for bar in bars[:100]:  # Ограничиваем для скорости
+            try:
+                signal = func(bar["price"], bar["sma"], bar["ema"], bar["lwma"], bar["cur"])
+
+                if strategy_type == 'long':
+                    action = "LONG" if signal > 0 else "HOLD"
+                else:
+                    action = "SHORT" if signal > 0 else "HOLD"
+
+                simulator.execute_trade(datetime.now(), action, bar['cur'], risk_percent=0.01)
+
+            except:
+                continue
+
+        # Закрываем позицию
+        if simulator.position_type != 'FLAT' and bars:
+            simulator.close_position(datetime.now(), bars[-1]['cur'])
+
+        # Возвращаем общую доходность как фитнес
+        total_return = ((simulator.balance - simulator.initial_balance) / simulator.initial_balance) * 100
+
+        # Добавляем штраф за большую просадку
+        penalty = simulator.max_drawdown * 50  # Штраф за просадку
+        fitness = total_return - penalty
+
+        return (max(fitness, -100),)  # Ограничиваем минимум
+
+    except Exception as e:
+        return (-100,)
+
+
+def evaluate_meta_with_balance(meta_individual, bars, long_func, short_func, pset_meta, simulator=None):
+    """
+    Оценочная функция для мета-популяции с учетом баланса
+    """
+    if simulator is None:
+        simulator = TradingSimulator(initial_balance=10000, commission=0.001)
+
+    simulator.reset()
+
+    try:
+        from deap import gp
+        meta_func = gp.compile(meta_individual, pset_meta)
+
+        for bar in bars[:100]:
+            try:
+                # Получаем сигналы от основных стратегий
+                long_raw = long_func(bar["price"], bar["sma"], bar["ema"], bar["lwma"], bar["cur"])
+                short_raw = short_func(bar["price"], bar["sma"], bar["ema"], bar["lwma"], bar["cur"])
+
+                long_bool = 1.0 if long_raw > 0 else 0.0
+                short_bool = 1.0 if short_raw > 0 else 0.0
+
+                # Получаем финальный сигнал от мета-стратегии
+                meta_signal = meta_func(long_bool, short_bool)
+
+                if meta_signal > 0.5:
+                    action = "LONG"
+                elif meta_signal < -0.5:
+                    action = "SHORT"
+                else:
+                    action = "HOLD"
+
+                simulator.execute_trade(datetime.now(), action, bar['cur'], risk_percent=0.02)
+
+            except:
+                continue
+
+        # Закрываем позицию
+        if simulator.position_type != 'FLAT' and bars:
+            simulator.close_position(datetime.now(), bars[-1]['cur'])
+
+        # Возвращаем общую доходность как фитнес
+        total_return = ((simulator.balance - simulator.initial_balance) / simulator.initial_balance) * 100
+
+        # Добавляем бонус за стабильность
+        stability_bonus = 0
+        if len(simulator.trades) > 5:  # Если есть достаточно сделок
+            win_rate = len([t for t in simulator.trades if t.pnl > 0]) / len(simulator.trades)
+            if win_rate > 0.4:  # Бонус за винрейт > 40%
+                stability_bonus = 10
+
+        # Штраф за просадку
+        drawdown_penalty = simulator.max_drawdown * 100
+
+        fitness = total_return + stability_bonus - drawdown_penalty
+
+        return (max(fitness, -100),)
+
+    except Exception as e:
+        return (-100,)
+
+
+# Модифицированная функция main() для использования с балансом
+def main_with_balance():
+    """Основная функция с интеграцией баланса"""
+    import random
+    from deap import tools, algorithms
+    random.seed(42)
+
+    # Создаем популяции (предполагается что toolbox'ы уже определены)
+    # pop_long = toolbox_long.population(n=50)  # Уменьшаем размер для скорости
+    # pop_short = toolbox_short.population(n=50)
+    # pop_meta = toolbox_meta.population(n=50)
+
+    # Hall of Fame для каждой популяции
+    # hof_long = tools.HallOfFame(3)
+    # hof_short = tools.HallOfFame(3)
+    # hof_meta = tools.
 
 
 def plot_signals(df, bars, best_long, best_short, best_meta, pset_long, pset_short, pset_meta):
@@ -159,9 +722,9 @@ def build_input_vectors(df: pd.DataFrame, min_window: int = 50):
 
 
 # Подготовка данных
-ndf = get_history_data("BTCUSDT", "1h", "11-11-2021", "01-01-2022")
-ndf = add_indicators(ndf, window=200)
-bars = build_input_vectors(ndf, min_window=200)
+ndf = get_history_data("BTCUSDT", "1h", "01-10-2020", "06-01-2020")
+ndf = add_indicators(ndf, window=50)
+bars = build_input_vectors(ndf, min_window=50)
 
 # ----- 2. Определение типов и примитивов GP -----
 VECTOR = list
@@ -868,7 +1431,7 @@ def main():
     # Создаем популяции
     pop_long = toolbox_long.population(n=100)
     pop_short = toolbox_short.population(n=100)
-    pop_meta = toolbox_meta.population(n=50)
+    pop_meta = toolbox_meta.population(n=100)
 
     # Hall of Fame для каждой популяции
     hof_long = tools.HallOfFame(3)
@@ -1221,268 +1784,43 @@ def quick_test_with_strings(long_str, short_str, meta_str):
 #     "твоя_строка_short_индивида",
 #     "твоя_строка_meta_индивида"
 # )
-def test_on_multiple_periods(best_long, best_short, best_meta, periods):
-    """
-    Тестирует лучших индивидов на различных временных периодах
-    """
-    results = []
 
-    for symbol, interval, start_date, end_date in periods:
-        print(f"\nTesting on period: {start_date} to {end_date}")
+if __name__ == '__main__':
+    # Получение данных
+    broker = BinanceBroker()
+    data = broker.get_history_data(['BTCUSDT'], '1h', '2024-01-01', '2024-02-01')
 
-        # Загрузка и подготовка данных
-        df = get_history_data(symbol, interval, start_date, end_date)
-        df = add_indicators(df, window=50)
-        bars = build_input_vectors(df, min_window=50)
+    print(f"Loaded {len(data)} candles")
+    print(data.head())
 
-        # Компиляция функций
-        long_func = gp.compile(best_long, pset_long)
-        short_func = gp.compile(best_short, pset_short)
-        meta_func = gp.compile(best_meta, pset_meta)
-
-        # Запуск тестирования
-        profit, trades_count = evaluate_combined_strategy(
-            bars, long_func, short_func, meta_func
-        )
-
-        # Расчёт дополнительных метрик
-        profit_per_trade = profit / trades_count if trades_count > 0 else 0
-        annual_return = (profit / df['Price'].iloc[0]) * (365 / len(df)) * 100
-
-        results.append({
-            'period': f"{start_date} to {end_date}",
-            'profit': profit,
-            'trades': trades_count,
-            'profit_per_trade': profit_per_trade,
-            'annual_return': annual_return
-        })
-
-        print(f"Profit: {profit:.2f}")
-        print(f"Trades: {trades_count}")
-        print(f"Profit per trade: {profit_per_trade:.2f}")
-        print(f"Annual return: {annual_return:.2f}%")
-
-    return pd.DataFrame(results)
+    # Создание симулятора
+    simulator = TradingSimulator(initial_balance=10000, commission=0.001)
 
 
-def evaluate_combined_strategy(bars, long_func, short_func, meta_func):
-    """
-    Оценка комбинированной стратегии без визуализации
-    """
-    profit = 0.0
-    position = 0
-    entry_price = 0.0
-    commission = 0.001
-    trades_count = 0
+    # Пример простой стратегии для тестирования
+    def simple_long_func(price, sma, ema, lwma, cur):
+        return 1 if cur > sma[-1] else -1
 
-    for i, b in enumerate(bars):
-        try:
-            # Получаем сигналы от каждой популяции
-            long_sig = long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-            short_sig = short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
 
-            long_bool = 1.0 if long_sig > 0 else 0.0
-            short_bool = 1.0 if short_sig > 0 else 0.0
+    def simple_short_func(price, sma, ema, lwma, cur):
+        return 1 if cur < sma[-1] else -1
 
-            # Мета-решение
-            final_sig = meta_func(long_bool, short_bool)
 
-            if final_sig > 0.5:
-                sig = 1  # Long
-            elif final_sig < -0.5:
-                sig = -1  # Short
-            else:
-                sig = 0  # Hold
-        except:
-            sig = 0
-
-        # Торговая логика
-        if position == 1 and sig <= 0:  # Закрываем лонг
-            trade_profit = (b["cur"] - entry_price) - commission * (entry_price + b["cur"])
-            profit += trade_profit
-            position = 0
-            trades_count += 1
-        elif position == -1 and sig >= 0:  # Закрываем шорт
-            trade_profit = (entry_price - b["cur"]) - commission * (entry_price + b["cur"])
-            profit += trade_profit
-            position = 0
-            trades_count += 1
-
-        if position == 0:
-            if sig > 0:  # Открываем лонг
-                position = 1
-                entry_price = b["cur"]
-            elif sig < 0:  # Открываем шорт
-                position = -1
-                entry_price = b["cur"]
-
-    # Закрываем финальную позицию
-    if position != 0 and bars:
-        final_price = bars[-1]["cur"]
-        if position == 1:
-            trade_profit = (final_price - entry_price) - commission * (entry_price + final_price)
+    def simple_meta_func(long_bool, short_bool):
+        if long_bool > 0.5:
+            return 1
+        elif short_bool > 0.5:
+            return -1
         else:
-            trade_profit = (entry_price - final_price) - commission * (entry_price + final_price)
-        profit += trade_profit
-        trades_count += 1
-
-    return profit, trades_count
-
-def test_on_multiple_periods_with_plots(best_long, best_short, best_meta, periods):
-    """
-    Тестирует лучших индивидов на различных временных периодах с построением графиков
-    """
-    results = []
-
-    for i, (symbol, interval, start_date, end_date) in enumerate(periods):
-        print(f"\nTesting on period {i + 1}: {start_date} to {end_date}")
-        print("=" * 50)
-
-        # Загрузка и подготовка данных
-        df = get_history_data(symbol, interval, start_date, end_date)
-        df = add_indicators(df, window=50)
-        bars = build_input_vectors(df, min_window=50)
-
-        # Компиляция функций
-        long_func = gp.compile(best_long, pset_long)
-        short_func = gp.compile(best_short, pset_short)
-        meta_func = gp.compile(best_meta, pset_meta)
-
-        # Запуск тестирования с визуализацией
-        profit, trades_count = evaluate_combined_strategy(
-            bars, long_func, short_func, meta_func
-        )
-
-        # Расчёт дополнительных метрик
-        profit_per_trade = profit / trades_count if trades_count > 0 else 0
-        annual_return = (profit / df['Price'].iloc[0]) * (365 / len(df)) * 100
-
-        results.append({
-            'period': f"{start_date} to {end_date}",
-            'profit': profit,
-            'trades': trades_count,
-            'profit_per_trade': profit_per_trade,
-            'annual_return': annual_return
-        })
-
-        print(f"Profit: {profit:.2f}")
-        print(f"Trades: {trades_count}")
-        print(f"Profit per trade: {profit_per_trade:.2f}")
-        print(f"Annual return: {annual_return:.2f}%")
-
-        # Построение графика для этого периода
-        plot_period_signals(df, bars, long_func, short_func, meta_func, profit)
-
-    return pd.DataFrame(results)
+            return 0
 
 
-def plot_period_signals(df, bars, long_func, short_func, meta_func, total_profit):
-    """
-    Строит график торговых сигналов для конкретного периода
-    """
-    long_entries, long_exits = [], []
-    short_entries, short_exits = [], []
-    pos = None
-    entry_price = 0.0
-    commission = 0.001
+    # Запуск бэктеста (требует адаптации под ваши данные)
+    print("\nExample of how to run backtest:")
+    print(
+        "signals_df, stats = backtest_strategy(data, simple_long_func, simple_short_func, simple_meta_func, simulator)")
+    print("plot_backtest_results(data, signals_df, simulator)")
 
-    for i, b in enumerate(bars):
-        try:
-            # Получаем сигналы от каждой популяции
-            long_sig = long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-            short_sig = short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
+    print("\n=== STARTING GP EVOLUTION ===")
+    (pops, hofs) = main()
 
-            # Нормализуем к булевым значениям
-            long_bool = 1.0 if long_sig > 0 else 0.0
-            short_bool = 1.0 if short_sig > 0 else 0.0
-
-            # Мета-популяция принимает решение
-            final_sig = meta_func(long_bool, short_bool)
-
-            # Интерпретируем финальный сигнал
-            if final_sig > 0.5:
-                sig = 1  # Long
-            elif final_sig < -0.5:
-                sig = -1  # Short
-            else:
-                sig = 0  # Hold
-
-        except:
-            sig = 0
-
-        # Логика торговли
-        if pos == "long":
-            if sig == -1:  # Выход из лонга
-                profit = (b["cur"] - entry_price) - commission * (entry_price + b["cur"])
-                long_exits.append((i, b["cur"]))
-                pos = None
-        elif pos == "short":
-            if sig == 1:  # Выход из шорта
-                profit = (entry_price - b["cur"]) - commission * (entry_price + b["cur"])
-                short_exits.append((i, b["cur"]))
-                pos = None
-        else:  # pos is None
-            if sig == 1:  # Вход в лонг
-                long_entries.append((i, b["cur"]))
-                entry_price = b["cur"]
-                pos = "long"
-            elif sig == -1:  # Вход в шорт
-                short_entries.append((i, b["cur"]))
-                entry_price = b["cur"]
-                pos = "short"
-
-    # Закрываем последнюю позицию
-    if pos == "long" and bars:
-        profit = (bars[-1]["cur"] - entry_price) - commission * (entry_price + bars[-1]["cur"])
-        long_exits.append((len(bars) - 1, bars[-1]["cur"]))
-    elif pos == "short" and bars:
-        profit = (entry_price - bars[-1]["cur"]) - commission * (entry_price + bars[-1]["cur"])
-        short_exits.append((len(bars) - 1, bars[-1]["cur"]))
-
-    # Построение графика
-    offset = len(df) - len(bars)
-    prices = df["Price"].iloc[offset:].values
-    plt.figure(figsize=(16, 8))
-    plt.plot(prices, label="Price", color='black', linewidth=1)
-
-    if long_entries:
-        xs, ys = zip(*long_entries)
-        plt.scatter(xs, ys, marker="^", s=100, color='green', label="LONG ENTRY")
-    if long_exits:
-        xs, ys = zip(*long_exits)
-        plt.scatter(xs, ys, marker="v", s=100, color='red', label="LONG EXIT")
-
-    if short_entries:
-        xs, ys = zip(*short_entries)
-        plt.scatter(xs, ys, marker="v", s=100, color='orange', label="SHORT ENTRY")
-    if short_exits:
-        xs, ys = zip(*short_exits)
-        plt.scatter(xs, ys, marker="^", s=100, color='blue', label="SHORT EXIT")
-
-    plt.legend()
-    plt.grid(True)
-    plt.title(f"Trading Signals - Total Profit: {total_profit:.2f}")
-    plt.show()
-
-
-if __name__ == "__main__":
-    populations, hall_of_fames = main()
-
-    # Получаем лучших индивидов
-    best_long = hall_of_fames[0][0]
-    best_short = hall_of_fames[1][0]
-    best_meta = hall_of_fames[2][0]
-
-    # Периоды для тестирования
-    test_periods = [
-        ("BTCUSDT", "1h", "01-10-2021", "01-01-2022"),
-        ("BTCUSDT", "1h", "01-10-2022", "01-01-2023"),
-        ("BTCUSDT", "1h", "01-10-2023", "01-01-2024")
-    ]
-
-    # Запуск тестирования с графиками
-    results_df = test_on_multiple_periods_with_plots(best_long, best_short, best_meta, test_periods)
-
-    # Вывод результатов
-    print("\n=== RESULTS SUMMARY ===")
-    print(results_df.to_string(index=False))
