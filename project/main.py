@@ -9,680 +9,39 @@ from deap import algorithms
 import pandas as pd
 from binance.client import Client
 import matplotlib.pyplot as plt
-
-from binance.client import Client
-import pandas as pd
-import numpy as np
+from datetime import datetime
 from dataclasses import dataclass
 from typing import List, Dict, Optional
-import matplotlib.pyplot as plt
-from datetime import datetime
 
+
+# =====================================================================
+# BROKER & DATA
+# =====================================================================
 
 class BinanceBroker():
     @staticmethod
     def get_history_data(symbols: list, interval: str, start_date: str, end_date: str):
         client = Client()
         columns = [
-            "Open Time",
-            "Open",
-            "High",
-            "Low",
-            "Close",
-            "Volume",
-            "Close Time",
-            "Quote Asset Volume",
-            "Number of Trades",
-            "Taker Buy Base Volume",
-            "Taker Buy Quote Volume",
-            "Ignore"
+            "Open Time", "Open", "High", "Low", "Close", "Volume",
+            "Close Time", "Quote Asset Volume", "Number of Trades",
+            "Taker Buy Base Volume", "Taker Buy Quote Volume", "Ignore"
         ]
-
         arr_df = []
         for symbol in symbols:
-            data = client.get_historical_klines(symbol=symbol,
-                                                interval=interval,
-                                                start_str=start_date,
-                                                end_str=end_date)
+            data = client.get_historical_klines(symbol=symbol, interval=interval,
+                                                start_str=start_date, end_str=end_date)
             df = pd.DataFrame(data, columns=columns, dtype=float)
             df["Open Time"] = pd.to_datetime(df["Open Time"], unit="ms")
             df["Close Time"] = pd.to_datetime(df["Close Time"], unit="ms")
             df["Symbol"] = symbol
             arr_df.append(df)
-
         if len(arr_df) == 1:
             return arr_df[0]
         else:
-            df = pd.concat(arr_df, axis=0, ignore_index=True)
-            return df
+            return pd.concat(arr_df, axis=0, ignore_index=True)
 
 
-@dataclass
-class Trade:
-    """Класс для представления одной сделки"""
-    timestamp: datetime
-    action: str  # 'BUY', 'SELL', 'CLOSE'
-    price: float
-    quantity: float
-    balance_before: float
-    balance_after: float
-    pnl: float = 0.0
-    position_type: str = "FLAT"  # 'LONG', 'SHORT', 'FLAT'
-
-
-class TradingSimulator:
-    """Симулятор торговли с тестовым балансом"""
-
-    def __init__(self, initial_balance: float = 10000, commission: float = 0.001):
-        self.initial_balance = initial_balance
-        self.balance = initial_balance
-        self.commission = commission
-        self.position = 0.0  # Текущая позиция
-        self.position_price = 0.0  # Цена входа в позицию
-        self.position_type = "FLAT"  # 'LONG', 'SHORT', 'FLAT'
-        self.trades: List[Trade] = []
-        self.equity_curve = []
-        self.max_balance = initial_balance
-        self.max_drawdown = 0.0
-
-    def reset(self):
-        """Сброс симулятора"""
-        self.balance = self.initial_balance
-        self.position = 0.0
-        self.position_price = 0.0
-        self.position_type = "FLAT"
-        self.trades = []
-        self.equity_curve = []
-        self.max_balance = self.initial_balance
-        self.max_drawdown = 0.0
-
-    def execute_trade(self, timestamp: datetime, action: str, price: float,
-                      risk_percent: float = 0.02) -> Optional[Trade]:
-        """
-        Выполнение сделки
-
-        Args:
-            timestamp: Время сделки
-            action: 'LONG', 'SHORT', 'HOLD'
-            price: Цена
-            risk_percent: Процент риска от баланса
-        """
-        balance_before = self.balance
-        pnl = 0.0
-
-        if action == 'HOLD' or self.balance <= 0:
-            self.equity_curve.append(self.balance)
-            return None
-
-        if action == 'LONG':
-            if self.position_type == 'SHORT':
-                # Закрываем короткую позицию
-                pnl = self.position * (self.position_price - price)
-                self.balance += pnl
-                commission_cost = abs(self.position * price * self.commission)
-                self.balance -= commission_cost
-
-                # Открываем длинную позицию
-                risk_amount = self.balance * risk_percent
-                quantity = risk_amount / price
-                self.position = quantity
-                self.position_price = price
-                self.position_type = 'LONG'
-                commission_cost += quantity * price * self.commission
-                self.balance -= commission_cost
-
-            elif self.position_type == 'FLAT':
-                # Открываем длинную позицию
-                risk_amount = self.balance * risk_percent
-                quantity = risk_amount / price
-                commission_cost = quantity * price * self.commission
-                self.balance -= commission_cost
-                self.position = quantity
-                self.position_price = price
-                self.position_type = 'LONG'
-
-        elif action == 'SHORT':
-            if self.position_type == 'LONG':
-                # Закрываем длинную позицию
-                pnl = self.position * (price - self.position_price)
-                self.balance += pnl
-                commission_cost = abs(self.position * price * self.commission)
-                self.balance -= commission_cost
-
-                # Открываем короткую позицию
-                risk_amount = self.balance * risk_percent
-                quantity = risk_amount / price
-                self.position = -quantity
-                self.position_price = price
-                self.position_type = 'SHORT'
-                commission_cost += quantity * price * self.commission
-                self.balance -= commission_cost
-
-            elif self.position_type == 'FLAT':
-                # Открываем короткую позицию
-                risk_amount = self.balance * risk_percent
-                quantity = risk_amount / price
-                commission_cost = quantity * price * self.commission
-                self.balance -= commission_cost
-                self.position = -quantity
-                self.position_price = price
-                self.position_type = 'SHORT'
-
-        # Обновляем статистику
-        self.max_balance = max(self.max_balance, self.balance)
-        current_drawdown = (self.max_balance - self.balance) / self.max_balance
-        self.max_drawdown = max(self.max_drawdown, current_drawdown)
-
-        self.equity_curve.append(self.balance)
-
-        # Создаем запись о сделке
-        trade = Trade(
-            timestamp=timestamp,
-            action=action,
-            price=price,
-            quantity=abs(self.position),
-            balance_before=balance_before,
-            balance_after=self.balance,
-            pnl=pnl,
-            position_type=self.position_type
-        )
-
-        self.trades.append(trade)
-        return trade
-
-    def close_position(self, timestamp: datetime, price: float) -> Optional[Trade]:
-        """Закрытие текущей позиции"""
-        if self.position_type == 'FLAT':
-            return None
-
-        balance_before = self.balance
-
-        if self.position_type == 'LONG':
-            pnl = self.position * (price - self.position_price)
-        else:  # SHORT
-            pnl = abs(self.position) * (self.position_price - price)
-
-        self.balance += pnl
-        commission_cost = abs(self.position * price * self.commission)
-        self.balance -= commission_cost
-
-        trade = Trade(
-            timestamp=timestamp,
-            action='CLOSE',
-            price=price,
-            quantity=abs(self.position),
-            balance_before=balance_before,
-            balance_after=self.balance,
-            pnl=pnl,
-            position_type=self.position_type
-        )
-
-        self.trades.append(trade)
-
-        # Сброс позиции
-        self.position = 0.0
-        self.position_price = 0.0
-        self.position_type = 'FLAT'
-
-        self.equity_curve.append(self.balance)
-        return trade
-
-    def get_unrealized_pnl(self, current_price: float) -> float:
-        """Получение нереализованной прибыли/убытка"""
-        if self.position_type == 'FLAT':
-            return 0.0
-        elif self.position_type == 'LONG':
-            return self.position * (current_price - self.position_price)
-        else:  # SHORT
-            return abs(self.position) * (self.position_price - current_price)
-
-    def get_statistics(self) -> Dict:
-        """Получение статистики торговли"""
-        if not self.trades:
-            return {}
-
-        trades_df = pd.DataFrame([
-            {
-                'timestamp': t.timestamp,
-                'action': t.action,
-                'price': t.price,
-                'quantity': t.quantity,
-                'pnl': t.pnl,
-                'balance': t.balance_after
-            } for t in self.trades
-        ])
-
-        profitable_trades = trades_df[trades_df['pnl'] > 0]
-        losing_trades = trades_df[trades_df['pnl'] < 0]
-
-        total_return = ((self.balance - self.initial_balance) / self.initial_balance) * 100
-
-        stats = {
-            'Initial Balance': self.initial_balance,
-            'Final Balance': self.balance,
-            'Total Return (%)': total_return,
-            'Max Drawdown (%)': self.max_drawdown * 100,
-            'Total Trades': len(self.trades),
-            'Profitable Trades': len(profitable_trades),
-            'Losing Trades': len(losing_trades),
-            'Win Rate (%)': (len(profitable_trades) / len(self.trades)) * 100 if self.trades else 0,
-            'Avg Profit': profitable_trades['pnl'].mean() if not profitable_trades.empty else 0,
-            'Avg Loss': losing_trades['pnl'].mean() if not losing_trades.empty else 0,
-            'Profit Factor': abs(
-                profitable_trades['pnl'].sum() / losing_trades['pnl'].sum()) if not losing_trades.empty and
-                                                                                losing_trades[
-                                                                                    'pnl'].sum() != 0 else float('inf')
-        }
-
-        return stats
-
-
-def backtest_strategy(df: pd.DataFrame, long_func, short_func, meta_func,
-                      simulator: TradingSimulator, verbose: bool = True):
-    """
-    Бэктест стратегии с симулятором
-
-    Args:
-        df: DataFrame с данными OHLCV
-        long_func, short_func, meta_func: Скомпилированные функции стратегий
-        simulator: Объект TradingSimulator
-        verbose: Выводить ли детали
-    """
-    simulator.reset()
-    signals = []
-
-    # Подготовка индикаторов (как в оригинальном коде)
-    df_copy = df.copy()
-    df_copy['SMA'] = df_copy['Close'].rolling(window=10).mean()
-    df_copy['EMA'] = df_copy['Close'].ewm(span=10).mean()
-    df_copy['LWMA'] = df_copy['Close'].rolling(window=10).apply(
-        lambda x: (x * np.arange(1, len(x) + 1)).sum() / np.arange(1, len(x) + 1).sum()
-    )
-
-    # Создание массива баров как в оригинальном коде
-    bars = []
-    for i in range(len(df_copy)):
-        if i < 10:  # Пропускаем первые 10 баров из-за индикаторов
-            continue
-
-        price_vector = df_copy['Close'].iloc[max(0, i - 9):i + 1].values
-        sma_vector = df_copy['SMA'].iloc[max(0, i - 9):i + 1].values
-        ema_vector = df_copy['EMA'].iloc[max(0, i - 9):i + 1].values
-        lwma_vector = df_copy['LWMA'].iloc[max(0, i - 9):i + 1].values
-        current_price = df_copy['Close'].iloc[i]
-
-        bar = {
-            "price": price_vector,
-            "sma": sma_vector,
-            "ema": ema_vector,
-            "lwma": lwma_vector,
-            "cur": current_price
-        }
-        bars.append(bar)
-
-    if verbose:
-        print(f"Starting backtest with {len(bars)} bars...")
-        print(f"Initial balance: ${simulator.initial_balance:,.2f}")
-
-    # Основной цикл бэктеста
-    for i, bar in enumerate(bars):
-        try:
-            timestamp = df_copy.iloc[i + 10]['Open Time'] if 'Open Time' in df_copy.columns else datetime.now()
-            current_price = bar['cur']
-
-            # Получение сигналов
-            long_raw = long_func(bar["price"], bar["sma"], bar["ema"], bar["lwma"], bar["cur"])
-            short_raw = short_func(bar["price"], bar["sma"], bar["ema"], bar["lwma"], bar["cur"])
-
-            long_bool = 1.0 if long_raw > 0 else 0.0
-            short_bool = 1.0 if short_raw > 0 else 0.0
-
-            meta_raw = meta_func(long_bool, short_bool)
-
-            # Определение действия
-            if meta_raw > 0.5:
-                action = "LONG"
-            elif meta_raw < -0.5:
-                action = "SHORT"
-            else:
-                action = "HOLD"
-
-            # Выполнение сделки
-            trade = simulator.execute_trade(timestamp, action, current_price)
-
-            # Сохранение информации о сигнале
-            unrealized_pnl = simulator.get_unrealized_pnl(current_price)
-            signals.append({
-                'timestamp': timestamp,
-                'price': current_price,
-                'long_raw': long_raw,
-                'short_raw': short_raw,
-                'long_bool': long_bool,
-                'short_bool': short_bool,
-                'meta_raw': meta_raw,
-                'action': action,
-                'balance': simulator.balance,
-                'position_type': simulator.position_type,
-                'unrealized_pnl': unrealized_pnl,
-                'trade_executed': trade is not None
-            })
-
-        except Exception as e:
-            if verbose:
-                print(f"Error at bar {i}: {e}")
-            signals.append({
-                'timestamp': datetime.now(),
-                'price': bar['cur'],
-                'long_raw': 0,
-                'short_raw': 0,
-                'long_bool': 0,
-                'short_bool': 0,
-                'meta_raw': 0,
-                'action': 'ERROR',
-                'balance': simulator.balance,
-                'position_type': simulator.position_type,
-                'unrealized_pnl': 0,
-                'trade_executed': False
-            })
-
-    # Закрываем позицию в конце
-    if simulator.position_type != 'FLAT':
-        final_price = bars[-1]['cur']
-        final_timestamp = signals[-1]['timestamp']
-        simulator.close_position(final_timestamp, final_price)
-
-    signals_df = pd.DataFrame(signals)
-
-    if verbose:
-        stats = simulator.get_statistics()
-        print(f"\n=== BACKTEST RESULTS ===")
-        for key, value in stats.items():
-            if isinstance(value, float):
-                print(f"{key}: {value:.2f}")
-            else:
-                print(f"{key}: {value}")
-
-    return signals_df, simulator.get_statistics()
-
-
-def plot_backtest_results(df: pd.DataFrame, signals_df: pd.DataFrame, simulator: TradingSimulator):
-    """Построение графиков результатов бэктеста"""
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(15, 12))
-
-    # График цены и сигналов
-    ax1.plot(df['Close'].values, label='Price', alpha=0.7)
-
-    # Отмечаем сделки
-    for trade in simulator.trades:
-        if hasattr(trade, 'timestamp'):
-            idx = signals_df[signals_df['timestamp'] == trade.timestamp].index
-            if len(idx) > 0:
-                idx = idx[0]
-                if trade.action == 'LONG':
-                    ax1.scatter(idx, trade.price, color='green', marker='^', s=100, label='Long' if idx == 0 else "")
-                elif trade.action == 'SHORT':
-                    ax1.scatter(idx, trade.price, color='red', marker='v', s=100, label='Short' if idx == 0 else "")
-                elif trade.action == 'CLOSE':
-                    ax1.scatter(idx, trade.price, color='blue', marker='x', s=100, label='Close' if idx == 0 else "")
-
-    ax1.set_title('Price and Trading Signals')
-    ax1.set_ylabel('Price')
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
-
-    # График баланса
-    ax2.plot(signals_df['balance'].values, label='Balance', color='blue')
-    ax2.set_title('Account Balance')
-    ax2.set_ylabel('Balance ($)')
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
-
-    # График сигналов
-    ax3.plot(signals_df['meta_raw'].values, label='Meta Signal', color='purple')
-    ax3.axhline(y=0.5, color='green', linestyle='--', alpha=0.5, label='Long Threshold')
-    ax3.axhline(y=-0.5, color='red', linestyle='--', alpha=0.5, label='Short Threshold')
-    ax3.set_title('Meta Strategy Signals')
-    ax3.set_ylabel('Signal Strength')
-    ax3.set_xlabel('Time')
-    ax3.legend()
-    ax3.grid(True, alpha=0.3)
-
-    plt.tight_layout()
-    plt.show()
-
-
-# Функции интеграции с оригинальным кодом
-def evaluate_with_balance(individual, bars, strategy_type, pset, simulator=None):
-    """
-    Оценочная функция с учетом баланса - заменяет evalLongTrading и evalShortTrading
-    """
-    if simulator is None:
-        simulator = TradingSimulator(initial_balance=10000, commission=0.001)
-
-    simulator.reset()
-
-    try:
-        from deap import gp
-        func = gp.compile(individual, pset)
-
-        for bar in bars[:100]:  # Ограничиваем для скорости
-            try:
-                signal = func(bar["price"], bar["sma"], bar["ema"], bar["lwma"], bar["cur"])
-
-                if strategy_type == 'long':
-                    action = "LONG" if signal > 0 else "HOLD"
-                else:
-                    action = "SHORT" if signal > 0 else "HOLD"
-
-                simulator.execute_trade(datetime.now(), action, bar['cur'], risk_percent=0.01)
-
-            except:
-                continue
-
-        # Закрываем позицию
-        if simulator.position_type != 'FLAT' and bars:
-            simulator.close_position(datetime.now(), bars[-1]['cur'])
-
-        # Возвращаем общую доходность как фитнес
-        total_return = ((simulator.balance - simulator.initial_balance) / simulator.initial_balance) * 100
-
-        # Добавляем штраф за большую просадку
-        penalty = simulator.max_drawdown * 50  # Штраф за просадку
-        fitness = total_return - penalty
-
-        return (max(fitness, -100),)  # Ограничиваем минимум
-
-    except Exception as e:
-        return (-100,)
-
-
-def evaluate_meta_with_balance(meta_individual, bars, long_func, short_func, pset_meta, simulator=None):
-    """
-    Оценочная функция для мета-популяции с учетом баланса
-    """
-    if simulator is None:
-        simulator = TradingSimulator(initial_balance=10000, commission=0.001)
-
-    simulator.reset()
-
-    try:
-        from deap import gp
-        meta_func = gp.compile(meta_individual, pset_meta)
-
-        for bar in bars[:100]:
-            try:
-                # Получаем сигналы от основных стратегий
-                long_raw = long_func(bar["price"], bar["sma"], bar["ema"], bar["lwma"], bar["cur"])
-                short_raw = short_func(bar["price"], bar["sma"], bar["ema"], bar["lwma"], bar["cur"])
-
-                long_bool = 1.0 if long_raw > 0 else 0.0
-                short_bool = 1.0 if short_raw > 0 else 0.0
-
-                # Получаем финальный сигнал от мета-стратегии
-                meta_signal = meta_func(long_bool, short_bool)
-
-                if meta_signal > 0.5:
-                    action = "LONG"
-                elif meta_signal < -0.5:
-                    action = "SHORT"
-                else:
-                    action = "HOLD"
-
-                simulator.execute_trade(datetime.now(), action, bar['cur'], risk_percent=0.02)
-
-            except:
-                continue
-
-        # Закрываем позицию
-        if simulator.position_type != 'FLAT' and bars:
-            simulator.close_position(datetime.now(), bars[-1]['cur'])
-
-        # Возвращаем общую доходность как фитнес
-        total_return = ((simulator.balance - simulator.initial_balance) / simulator.initial_balance) * 100
-
-        # Добавляем бонус за стабильность
-        stability_bonus = 0
-        if len(simulator.trades) > 5:  # Если есть достаточно сделок
-            win_rate = len([t for t in simulator.trades if t.pnl > 0]) / len(simulator.trades)
-            if win_rate > 0.4:  # Бонус за винрейт > 40%
-                stability_bonus = 10
-
-        # Штраф за просадку
-        drawdown_penalty = simulator.max_drawdown * 100
-
-        fitness = total_return + stability_bonus - drawdown_penalty
-
-        return (max(fitness, -100),)
-
-    except Exception as e:
-        return (-100,)
-
-
-# Модифицированная функция main() для использования с балансом
-def main_with_balance():
-    """Основная функция с интеграцией баланса"""
-    import random
-    from deap import tools, algorithms
-    random.seed(42)
-
-    # Создаем популяции (предполагается что toolbox'ы уже определены)
-    # pop_long = toolbox_long.population(n=50)  # Уменьшаем размер для скорости
-    # pop_short = toolbox_short.population(n=50)
-    # pop_meta = toolbox_meta.population(n=50)
-
-    # Hall of Fame для каждой популяции
-    # hof_long = tools.HallOfFame(3)
-    # hof_short = tools.HallOfFame(3)
-    # hof_meta = tools.
-
-
-def plot_signals(df, bars, best_long, best_short, best_meta, pset_long, pset_short, pset_meta):
-    """Интерпретатор сигналов для трех популяций"""
-    long_func = gp.compile(best_long, pset_long)
-    short_func = gp.compile(best_short, pset_short)
-    meta_func = gp.compile(best_meta, pset_meta)
-
-    long_entries, long_exits = [], []
-    short_entries, short_exits = [], []
-    pos = None
-    entry_price = 0.0
-    total_profit = 0.0
-    commission = 0.001
-
-    for i, b in enumerate(bars):
-        try:
-            # Получаем сигналы от каждой популяции
-            long_sig = long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-            short_sig = short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-
-            # Нормализуем к булевым значениям
-            long_bool = 1.0 if long_sig > 0 else 0.0
-            short_bool = 1.0 if short_sig > 0 else 0.0
-
-            # Мета-популяция принимает решение
-            final_sig = meta_func(long_bool, short_bool)
-
-            # Интерпретируем финальный сигнал
-            if final_sig > 0.5:
-                sig = 1  # Long
-            elif final_sig < -0.5:
-                sig = -1  # Short
-            else:
-                sig = 0  # Hold
-
-        except:
-            sig = 0
-
-        # Логика торговли с правильной обработкой состояний
-        if pos == "long":
-            if sig == -1:  # Выход из лонга
-                profit = (b["cur"] - entry_price) - commission * (entry_price + b["cur"])
-                total_profit += profit
-                long_exits.append((i, b["cur"]))
-                pos = None
-            # Если sig == 1, остаемся в лонге (ничего не делаем)
-            # Если sig == 0, тоже остаемся в лонге
-        elif pos == "short":
-            if sig == 1:  # Выход из шорта
-                profit = (entry_price - b["cur"]) - commission * (entry_price + b["cur"])
-                total_profit += profit
-                short_exits.append((i, b["cur"]))
-                pos = None
-            # Если sig == -1, остаемся в шорте (ничего не делаем)
-            # Если sig == 0, тоже остаемся в шорте
-        else:  # pos is None
-            if sig == 1:  # Вход в лонг
-                long_entries.append((i, b["cur"]))
-                entry_price = b["cur"]
-                pos = "long"
-            elif sig == -1:  # Вход в шорт
-                short_entries.append((i, b["cur"]))
-                entry_price = b["cur"]
-                pos = "short"
-            # Если sig == 0, остаемся без позиции
-
-    # Закрываем последнюю позицию
-    if pos == "long" and bars:
-        profit = (bars[-1]["cur"] - entry_price) - commission * (entry_price + bars[-1]["cur"])
-        total_profit += profit
-        long_exits.append((len(bars) - 1, bars[-1]["cur"]))
-    elif pos == "short" and bars:
-        profit = (entry_price - bars[-1]["cur"]) - commission * (entry_price + bars[-1]["cur"])
-        total_profit += profit
-        short_exits.append((len(bars) - 1, bars[-1]["cur"]))
-
-    # Построение графика
-    offset = len(df) - len(bars)
-    prices = df["Price"].iloc[offset:].values
-    plt.figure(figsize=(16, 8))
-    plt.plot(prices, label="Price", color='black', linewidth=1)
-
-    if long_entries:
-        xs, ys = zip(*long_entries)
-        plt.scatter(xs, ys, marker="^", s=100, color='green', label="LONG ENTRY")
-    if long_exits:
-        xs, ys = zip(*long_exits)
-        plt.scatter(xs, ys, marker="v", s=100, color='red', label="LONG EXIT")
-
-    if short_entries:
-        xs, ys = zip(*short_entries)
-        plt.scatter(xs, ys, marker="v", s=100, color='orange', label="SHORT ENTRY")
-    if short_exits:
-        xs, ys = zip(*short_exits)
-        plt.scatter(xs, ys, marker="^", s=100, color='blue', label="SHORT EXIT")
-
-    plt.legend()
-    plt.grid(True)
-    plt.title(f"Three Population Trading Signals - Total Profit: {total_profit:.2f}")
-    plt.show()
-
-
-    trades = len(long_entries) + len(short_entries)
-    print(f"Trades: {trades}, Total Profit: {total_profit:.2f}")
-    if trades > 0:
-        print(f"Profit per trade: {total_profit / trades:.2f}")
-
-# ----- 1. Загрузка исторических данных и расчёт индикаторов -----
 def get_history_data(symbol, interval, start_date, end_date):
     client = Client()
     klines = client.get_historical_klines(symbol, interval, start_date, end_date)
@@ -721,442 +80,371 @@ def build_input_vectors(df: pd.DataFrame, min_window: int = 50):
     return bars
 
 
-# Подготовка данных
-ndf = get_history_data("BTCUSDT", "1h", "01-10-2020", "06-01-2020")
-ndf = add_indicators(ndf, window=50)
-bars = build_input_vectors(ndf, min_window=50)
+# =====================================================================
+# SIMULATOR
+# =====================================================================
 
-# ----- 2. Определение типов и примитивов GP -----
+@dataclass
+class Trade:
+    timestamp: datetime
+    action: str
+    price: float
+    quantity: float
+    balance_before: float
+    balance_after: float
+    pnl: float = 0.0
+    position_type: str = "FLAT"
+
+
+class TradingSimulator:
+    def __init__(self, initial_balance: float = 10000, commission: float = 0.001,
+                 risk_percent: float = 0.02):
+        self.initial_balance = initial_balance
+        self.balance = initial_balance
+        self.commission = commission
+        self.risk_percent = risk_percent       # доля капитала на позицию
+        self.position = 0.0
+        self.position_price = 0.0
+        self.position_type = "FLAT"
+        self.trades: List[Trade] = []
+        self.equity_curve = []
+        self.max_balance = initial_balance
+        self.max_drawdown = 0.0
+
+    def reset(self):
+        self.balance = self.initial_balance
+        self.position = 0.0
+        self.position_price = 0.0
+        self.position_type = "FLAT"
+        self.trades = []
+        self.equity_curve = []
+        self.max_balance = self.initial_balance
+        self.max_drawdown = 0.0
+
+    def execute_trade(self, timestamp, action, price, risk_percent=None):
+        if risk_percent is None:
+            risk_percent = self.risk_percent
+        balance_before = self.balance
+        pnl = 0.0
+
+        if action == 'HOLD' or self.balance <= 0:
+            self.equity_curve.append(self.balance)
+            return None
+
+        if action == 'LONG':
+            if self.position_type == 'SHORT':
+                pnl = self.position * (self.position_price - price)
+                self.balance += pnl
+                self.balance -= abs(self.position * price * self.commission)
+
+                risk_amount = self.balance * risk_percent
+                quantity = risk_amount / price
+                self.position = quantity
+                self.position_price = price
+                self.position_type = 'LONG'
+                self.balance -= quantity * price * self.commission
+
+            elif self.position_type == 'FLAT':
+                risk_amount = self.balance * risk_percent
+                quantity = risk_amount / price
+                self.balance -= quantity * price * self.commission
+                self.position = quantity
+                self.position_price = price
+                self.position_type = 'LONG'
+
+        elif action == 'SHORT':
+            if self.position_type == 'LONG':
+                pnl = self.position * (price - self.position_price)
+                self.balance += pnl
+                self.balance -= abs(self.position * price * self.commission)
+
+                risk_amount = self.balance * risk_percent
+                quantity = risk_amount / price
+                self.position = -quantity
+                self.position_price = price
+                self.position_type = 'SHORT'
+                self.balance -= quantity * price * self.commission
+
+            elif self.position_type == 'FLAT':
+                risk_amount = self.balance * risk_percent
+                quantity = risk_amount / price
+                self.balance -= quantity * price * self.commission
+                self.position = -quantity
+                self.position_price = price
+                self.position_type = 'SHORT'
+
+        elif action == 'CLOSE':
+            if self.position_type == 'LONG':
+                pnl = self.position * (price - self.position_price)
+            elif self.position_type == 'SHORT':
+                pnl = abs(self.position) * (self.position_price - price)
+            self.balance += pnl
+            self.balance -= abs(self.position * price * self.commission)
+            self.position = 0.0
+            self.position_price = 0.0
+            self.position_type = 'FLAT'
+
+        self.max_balance = max(self.max_balance, self.balance)
+        current_drawdown = (self.max_balance - self.balance) / self.max_balance if self.max_balance > 0 else 0
+        self.max_drawdown = max(self.max_drawdown, current_drawdown)
+        self.equity_curve.append(self.balance)
+
+        trade = Trade(
+            timestamp=timestamp, action=action, price=price,
+            quantity=abs(self.position), balance_before=balance_before,
+            balance_after=self.balance, pnl=pnl, position_type=self.position_type
+        )
+        self.trades.append(trade)
+        return trade
+
+    def close_position(self, timestamp, price):
+        if self.position_type == 'FLAT':
+            return None
+        return self.execute_trade(timestamp, 'CLOSE', price)
+
+    def get_unrealized_pnl(self, current_price):
+        if self.position_type == 'FLAT':
+            return 0.0
+        elif self.position_type == 'LONG':
+            return self.position * (current_price - self.position_price)
+        else:
+            return abs(self.position) * (self.position_price - current_price)
+
+    def get_statistics(self):
+        if not self.trades:
+            return {}
+        trades_with_pnl = [t for t in self.trades if t.pnl != 0]
+        profitable = [t for t in trades_with_pnl if t.pnl > 0]
+        losing = [t for t in trades_with_pnl if t.pnl < 0]
+        total_return = ((self.balance - self.initial_balance) / self.initial_balance) * 100
+        return {
+            'Initial Balance': self.initial_balance,
+            'Final Balance': self.balance,
+            'Total Return (%)': total_return,
+            'Max Drawdown (%)': self.max_drawdown * 100,
+            'Total Trades': len(self.trades),
+            'Profitable Trades': len(profitable),
+            'Losing Trades': len(losing),
+            'Win Rate (%)': (len(profitable) / len(trades_with_pnl)) * 100 if trades_with_pnl else 0,
+            'Avg Profit': np.mean([t.pnl for t in profitable]) if profitable else 0,
+            'Avg Loss': np.mean([t.pnl for t in losing]) if losing else 0,
+        }
+
+
+# =====================================================================
+# GP PRIMITIVES
+# =====================================================================
+
 VECTOR = list
 SCALAR = float
-BOOL = float  # Для мета-популяции
+BOOL = float
 
 
-# Примитивы для работы с векторами
-def vec_add(a: VECTOR, b: VECTOR) -> VECTOR:
+def vec_add(a, b):
     return [x + y for x, y in zip(a, b)]
 
-def vec_sub(a: VECTOR, b: VECTOR) -> VECTOR:
+def vec_sub(a, b):
     return [x - y for x, y in zip(a, b)]
 
-def vec_mul(a: VECTOR, b: VECTOR) -> VECTOR:
+def vec_mul(a, b):
     return [x * y for x, y in zip(a, b)]
 
-def vec_div(a: VECTOR, b: VECTOR) -> VECTOR:
-    return [x / (y if abs(y) > 1e-10 else 1e-10) for x, y in zip(a, b)]
-
-def vec_add_s(a: VECTOR, b: SCALAR) -> VECTOR:
+def vec_add_s(a, b):
     return [x + b for x in a]
 
-def vec_sub_s(a: VECTOR, b: SCALAR) -> VECTOR:
+def vec_sub_s(a, b):
     return [x - b for x in a]
 
-def vec_mul_s(a: VECTOR, b: SCALAR) -> VECTOR:
+def vec_mul_s(a, b):
     return [x * b for x in a]
 
-def vec_div_s(a: VECTOR, b: SCALAR) -> VECTOR:
+def vec_div_s(a, b):
     divisor = b if abs(b) > 1e-10 else 1e-10
     return [x / divisor for x in a]
 
-def vec_pow_s(a: VECTOR, b: SCALAR) -> VECTOR:
-    return [pow(abs(x), b) * (1 if x >= 0 else -1) for x in a]
-
-def vec_abs(a: VECTOR) -> VECTOR:
+def vec_abs(a):
     return [abs(x) for x in a]
 
-def vec_neg(a: VECTOR) -> VECTOR:
+def vec_neg(a):
     return [-x for x in a]
 
-def vec_sin(a: VECTOR) -> VECTOR:
+def vec_sin(a):
     return [math.sin(x) for x in a]
 
-def vec_cos(a: VECTOR) -> VECTOR:
+def vec_cos(a):
     return [math.cos(x) for x in a]
 
-def vec_exp(a: VECTOR) -> VECTOR:
-    return [math.exp(min(x, 100)) for x in a]  # Ограничиваем для избежания переполнения
-
-def vec_log(a: VECTOR) -> VECTOR:
+def vec_log(a):
     return [math.log(abs(x) + 1e-10) for x in a]
 
-def vec_sqrt(a: VECTOR) -> VECTOR:
+def vec_sqrt(a):
     return [math.sqrt(abs(x)) for x in a]
 
-def vec_clip01(a: VECTOR) -> VECTOR:
-    return [min(max(x, 0.0), 1.0) for x in a]
+def last_elem(a):
+    return a[-1] if len(a) > 0 else 0.0
 
-def vec_concat(a: VECTOR, b: VECTOR) -> VECTOR:
-    return a + b
+def first_elem(a):
+    return a[0] if len(a) > 0 else 0.0
 
-def vec_slice(a: VECTOR, start: SCALAR, end: SCALAR) -> VECTOR:
-    s = max(0, min(int(start), len(a)))
-    e = max(s, min(int(end), len(a)))
-    return a[s:e] if s < len(a) else []
-
-def vec_reverse(a: VECTOR) -> VECTOR:
-    return a[::-1]
-
-def vec_sort(a: VECTOR) -> VECTOR:
-    return sorted(a)
-
-def vec_max_elem(a: VECTOR) -> SCALAR:
-    return max(a) if len(a) > 0 else 0.0
-
-def vec_min_elem(a: VECTOR) -> SCALAR:
-    return min(a) if len(a) > 0 else 0.0
-
-def vec_sum(a: VECTOR) -> SCALAR:
-    return sum(a)
-
-def vec_prod(a: VECTOR) -> SCALAR:
-    result = 1.0
-    for x in a:
-        result *= x
-    return result
-
-def vec_length(a: VECTOR) -> SCALAR:
-    return float(len(a))
-
-def vec_dot(a: VECTOR, b: VECTOR) -> SCALAR:
-    return sum(x * y for x, y in zip(a, b))
-
-def vec_norm(a: VECTOR) -> SCALAR:
-    return math.sqrt(sum(x * x for x in a))
-
-def vec_distance(a: VECTOR, b: VECTOR) -> SCALAR:
-    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
-
-# Скалярные операции
-def scalar_mean(a: VECTOR) -> SCALAR:
+def scalar_mean(a):
     return sum(a) / len(a) if len(a) > 0 else 0.0
 
-def scalar_median(a: VECTOR) -> SCALAR:
-    if len(a) == 0:
-        return 0.0
-    sorted_a = sorted(a)
-    n = len(sorted_a)
-    if n % 2 == 0:
-        return (sorted_a[n//2 - 1] + sorted_a[n//2]) / 2
-    else:
-        return sorted_a[n//2]
-
-def scalar_std(a: VECTOR) -> SCALAR:
+def scalar_std(a):
     if len(a) <= 1:
         return 0.0
     mean = sum(a) / len(a)
-    variance = sum((x - mean) ** 2 for x in a) / len(a)
-    return math.sqrt(variance)
+    return math.sqrt(sum((x - mean) ** 2 for x in a) / len(a))
 
-def first_elem(a: VECTOR) -> SCALAR:
-    return a[0] if len(a) > 0 else 0.0
+def vec_max_elem(a):
+    return max(a) if len(a) > 0 else 0.0
 
-def last_elem(a: VECTOR) -> SCALAR:
-    return a[-1] if len(a) > 0 else 0.0
+def vec_min_elem(a):
+    return min(a) if len(a) > 0 else 0.0
 
-def nth_elem(a: VECTOR, n: SCALAR) -> SCALAR:
-    idx = int(n) % len(a) if len(a) > 0 else 0
-    return a[idx] if len(a) > 0 else 0.0
+def vec_sum(a):
+    return sum(a)
 
-def sum_gt(a: VECTOR, b: VECTOR) -> SCALAR:
+def vec_dot(a, b):
+    return sum(x * y for x, y in zip(a, b))
+
+def vec_norm(a):
+    return math.sqrt(sum(x * x for x in a))
+
+def sum_gt(a, b):
     return 1.0 if sum(a) > sum(b) else 0.0
 
-def mean_gt(a: VECTOR, b: SCALAR) -> SCALAR:
-    mean_a = sum(a) / len(a) if len(a) > 0 else 0.0
-    return 1.0 if mean_a > b else 0.0
+def mean_gt(a, b):
+    return 1.0 if (sum(a) / len(a) if len(a) > 0 else 0.0) > b else 0.0
 
-def rnd_mean_gt(a: VECTOR, low: SCALAR, high: SCALAR) -> SCALAR:
-    r = random.uniform(low, high)
-    mean_a = sum(a) / len(a) if len(a) > 0 else 0.0
-    return 1.0 if mean_a > r else 0.0
+def rnd_mean_gt(a, low, high):
+    # Детерминистская версия: используем среднее (low+high)/2 вместо random
+    # чтобы фитнес одного и того же индивида был стабильным
+    threshold = (low + high) / 2.0
+    return 1.0 if (sum(a) / len(a) if len(a) > 0 else 0.0) > threshold else 0.0
 
-def scalar_add(a: SCALAR, b: SCALAR) -> SCALAR:
+def scalar_add(a, b):
     return a + b
 
-def scalar_sub(a: SCALAR, b: SCALAR) -> SCALAR:
+def scalar_sub(a, b):
     return a - b
 
-def scalar_mul(a: SCALAR, b: SCALAR) -> SCALAR:
+def scalar_mul(a, b):
     return a * b
 
-def scalar_div(a: SCALAR, b: SCALAR) -> SCALAR:
+def scalar_div(a, b):
     return a / b if abs(b) > 1e-10 else a / 1e-10
 
-def scalar_pow(a: SCALAR, b: SCALAR) -> SCALAR:
-    return pow(abs(a), b) * (1 if a >= 0 else -1)
-
-def scalar_mod(a: SCALAR, b: SCALAR) -> SCALAR:
-    return a % b if abs(b) > 1e-10 else 0.0
-
-def scalar_abs(a: SCALAR) -> SCALAR:
+def scalar_abs(a):
     return abs(a)
 
-def scalar_sin(a: SCALAR) -> SCALAR:
+def scalar_sin(a):
     return math.sin(a)
 
-def scalar_cos(a: SCALAR) -> SCALAR:
+def scalar_cos(a):
     return math.cos(a)
 
-def scalar_tan(a: SCALAR) -> SCALAR:
-    return math.tan(a)
-
-def scalar_exp(a: SCALAR) -> SCALAR:
+def scalar_exp(a):
     return math.exp(min(a, 100))
 
-def scalar_sqrt(a: SCALAR) -> SCALAR:
+def scalar_sqrt(a):
     return math.sqrt(abs(a))
 
-def scalar_floor(a: SCALAR) -> SCALAR:
-    return float(math.floor(a))
-
-def scalar_ceil(a: SCALAR) -> SCALAR:
-    return float(math.ceil(a))
-
-def scalar_round(a: SCALAR) -> SCALAR:
-    return float(round(a))
-
-def scalar_gt(a: SCALAR, b: SCALAR) -> SCALAR:
-    return 1.0 if a > b else 0.0
-
-def scalar_lt(a: SCALAR, b: SCALAR) -> SCALAR:
-    return 1.0 if a < b else 0.0
-
-def scalar_gte(a: SCALAR, b: SCALAR) -> SCALAR:
-    return 1.0 if a >= b else 0.0
-
-def scalar_lte(a: SCALAR, b: SCALAR) -> SCALAR:
-    return 1.0 if a <= b else 0.0
-
-def scalar_eq(a: SCALAR, b: SCALAR) -> SCALAR:
-    return 1.0 if abs(a - b) < 1e-6 else 0.0
-
-def scalar_neq(a: SCALAR, b: SCALAR) -> SCALAR:
-    return 1.0 if abs(a - b) >= 1e-6 else 0.0
-
-def scalar_pos(a: SCALAR) -> SCALAR:
-    return 1.0 if a > 0 else 0.0
-
-def scalar_neg(a: SCALAR) -> SCALAR:
-    return 1.0 if a < 0 else 0.0
-
-def scalar_zero(a: SCALAR) -> SCALAR:
-    return 1.0 if abs(a) < 1e-6 else 0.0
-
-def scalar_clip01(a: SCALAR) -> SCALAR:
-    return min(max(a, 0.0), 1.0)
-
-def scalar_clip(a: SCALAR, low: SCALAR, high: SCALAR) -> SCALAR:
-    return min(max(a, low), high)
-
-def scalar_log(a: SCALAR) -> SCALAR:
+def scalar_log(a):
     return math.log(abs(a) + 1e-10)
 
-def scalar_sigmoid(a: SCALAR) -> SCALAR:
+def scalar_sigmoid(a):
     return 1.0 / (1.0 + math.exp(-min(max(a, -100), 100)))
 
-def scalar_tanh(a: SCALAR) -> SCALAR:
+def scalar_tanh(a):
     return math.tanh(a)
 
-def scalar_random() -> SCALAR:
-    return random.random()
+def scalar_gt(a, b):
+    return 1.0 if a > b else 0.0
 
-def scalar_random_range(low: SCALAR, high: SCALAR) -> SCALAR:
-    return random.uniform(low, high)
+def scalar_lt(a, b):
+    return 1.0 if a < b else 0.0
 
-def scalar_random_gauss(mean: SCALAR, std: SCALAR) -> SCALAR:
-    return random.gauss(mean, std)
+def scalar_gte(a, b):
+    return 1.0 if a >= b else 0.0
 
-# Условные операции
-def if_else(cond: SCALAR, a: VECTOR, b: VECTOR) -> VECTOR:
-    return a if cond > 0 else b
+def scalar_lte(a, b):
+    return 1.0 if a <= b else 0.0
 
-def scalar_if_else(cond: SCALAR, a: SCALAR, b: SCALAR) -> SCALAR:
-    return a if cond > 0 else b
+def scalar_eq(a, b):
+    return 1.0 if abs(a - b) < 1e-6 else 0.0
 
-def vec_if_else_elem(cond: VECTOR, a: VECTOR, b: VECTOR) -> VECTOR:
-    return [av if cv > 0 else bv for cv, av, bv in zip(cond, a, b)]
-
-# Булевые операции
-def bool_and(a: BOOL, b: BOOL) -> BOOL:
-    return 1.0 if (a > 0.5 and b > 0.5) else 0.0
-
-def bool_or(a: BOOL, b: BOOL) -> BOOL:
-    return 1.0 if (a > 0.5 or b > 0.5) else 0.0
-
-def bool_not(a: BOOL) -> BOOL:
-    return 1.0 if a <= 0.5 else 0.0
-
-def bool_xor(a: BOOL, b: BOOL) -> BOOL:
-    return 1.0 if ((a > 0.5) != (b > 0.5)) else 0.0
-
-def bool_nand(a: BOOL, b: BOOL) -> BOOL:
-    return bool_not(bool_and(a, b))
-
-def bool_nor(a: BOOL, b: BOOL) -> BOOL:
-    return bool_not(bool_or(a, b))
-
-def bool_if_then_else(cond: BOOL, a: BOOL, b: BOOL) -> BOOL:
-    return a if cond > 0.5 else b
-
-def bool_from_scalar(a: SCALAR) -> BOOL:
+def scalar_pos(a):
     return 1.0 if a > 0 else 0.0
 
-def scalar_from_bool(a: BOOL) -> SCALAR:
-    return a
+def scalar_neg_check(a):
+    return 1.0 if a < 0 else 0.0
 
-# Векторные булевы операции
-def vec_bool_and(a: VECTOR, b: VECTOR) -> VECTOR:
-    return [bool_and(x, y) for x, y in zip(a, b)]
+def scalar_clip01(a):
+    return min(max(a, 0.0), 1.0)
 
-def vec_bool_or(a: VECTOR, b: VECTOR) -> VECTOR:
-    return [bool_or(x, y) for x, y in zip(a, b)]
+def if_else(cond, a, b):
+    return a if cond > 0 else b
 
-def vec_bool_not(a: VECTOR) -> VECTOR:
-    return [bool_not(x) for x in a]
+def scalar_if_else(cond, a, b):
+    return a if cond > 0 else b
 
-def vec_bool_xor(a: VECTOR, b: VECTOR) -> VECTOR:
-    return [bool_xor(x, y) for x, y in zip(a, b)]
+# Булевые для мета-популяции
+def bool_and(a, b):
+    return 1.0 if (a > 0.5 and b > 0.5) else 0.0
 
-# Операции сравнения векторов
-def vec_gt(a: VECTOR, b: VECTOR) -> VECTOR:
-    return [scalar_gt(x, y) for x, y in zip(a, b)]
+def bool_or(a, b):
+    return 1.0 if (a > 0.5 or b > 0.5) else 0.0
 
-def vec_lt(a: VECTOR, b: VECTOR) -> VECTOR:
-    return [scalar_lt(x, y) for x, y in zip(a, b)]
+def bool_not(a):
+    return 1.0 if a <= 0.5 else 0.0
 
-def vec_gte(a: VECTOR, b: VECTOR) -> VECTOR:
-    return [scalar_gte(x, y) for x, y in zip(a, b)]
+def bool_xor(a, b):
+    return 1.0 if ((a > 0.5) != (b > 0.5)) else 0.0
 
-def vec_lte(a: VECTOR, b: VECTOR) -> VECTOR:
-    return [scalar_lte(x, y) for x, y in zip(a, b)]
-
-def vec_eq(a: VECTOR, b: VECTOR) -> VECTOR:
-    return [scalar_eq(x, y) for x, y in zip(a, b)]
-
-def vec_neq(a: VECTOR, b: VECTOR) -> VECTOR:
-    return [scalar_neq(x, y) for x, y in zip(a, b)]
-
-def vec_gt_s(a: VECTOR, b: SCALAR) -> VECTOR:
-    return [scalar_gt(x, b) for x in a]
-
-def vec_lt_s(a: VECTOR, b: SCALAR) -> VECTOR:
-    return [scalar_lt(x, b) for x in a]
-
-def vec_eq_s(a: VECTOR, b: SCALAR) -> VECTOR:
-    return [scalar_eq(x, b) for x in a]
-
-# Создание векторов
-def vec_create_zeros(size: SCALAR) -> VECTOR:
-    return [0.0] * max(0, int(size))
-
-def vec_create_ones(size: SCALAR) -> VECTOR:
-    return [1.0] * max(0, int(size))
-
-def vec_create_range(start: SCALAR, end: SCALAR) -> VECTOR:
-    s, e = int(start), int(end)
-    return list(range(s, e)) if s < e else []
-
-def vec_create_random(size: SCALAR) -> VECTOR:
-    return [random.random() for _ in range(max(0, int(size)))]
-
-def vec_create_const(size: SCALAR, value: SCALAR) -> VECTOR:
-    return [value] * max(0, int(size))
-
-# Агрегатные операции
-def vec_all_gt(a: VECTOR, b: SCALAR) -> SCALAR:
-    return 1.0 if all(x > b for x in a) else 0.0
-
-def vec_any_gt(a: VECTOR, b: SCALAR) -> SCALAR:
-    return 1.0 if any(x > b for x in a) else 0.0
-
-def vec_count_gt(a: VECTOR, b: SCALAR) -> SCALAR:
-    return float(sum(1 for x in a if x > b))
-
-def vec_all_pos(a: VECTOR) -> SCALAR:
-    return 1.0 if all(x > 0 for x in a) else 0.0
-
-def vec_any_neg(a: VECTOR) -> SCALAR:
-    return 1.0 if any(x < 0 for x in a) else 0.0
-
-def vec_count_zeros(a: VECTOR) -> SCALAR:
-    return float(sum(1 for x in a if abs(x) < 1e-6))
-
-# Преобразования типов
-def vec_to_bool(a: VECTOR) -> VECTOR:
-    return [bool_from_scalar(x) for x in a]
-
-def bool_vec_to_scalar(a: VECTOR) -> SCALAR:
-    return 1.0 if any(x > 0.5 for x in a) else 0.0
-
-def bool_vec_all_true(a: VECTOR) -> SCALAR:
-    return 1.0 if all(x > 0.5 for x in a) else 0.0
+def bool_if_then_else(cond, a, b):
+    return a if cond > 0.5 else b
 
 
-# ----- 3. Настройка DEAP GP для трех популяций -----
+# =====================================================================
+# PSET SETUP
+# =====================================================================
 
-# Популяция 1: Long стратегии
-pset_long = gp.PrimitiveSetTyped(
-    "LONG",
-    in_types=[VECTOR, VECTOR, VECTOR, VECTOR, SCALAR],
-    ret_type=SCALAR,
-    prefix="IN"
-)
+# Long population: вход — векторы + скаляр, выход — SCALAR (>0 = позиция открыта, <=0 = закрыта)
+pset_long = gp.PrimitiveSetTyped("LONG", [VECTOR, VECTOR, VECTOR, VECTOR, SCALAR], SCALAR, "IN")
 
-# Популяция 2: Short стратегии
-pset_short = gp.PrimitiveSetTyped(
-    "SHORT",
-    in_types=[VECTOR, VECTOR, VECTOR, VECTOR, SCALAR],
-    ret_type=SCALAR,
-    prefix="IN"
-)
+# Short population: аналогично
+pset_short = gp.PrimitiveSetTyped("SHORT", [VECTOR, VECTOR, VECTOR, VECTOR, SCALAR], SCALAR, "IN")
 
-# Популяция 3: Мета-стратегия (принимает решения на основе двух булевых сигналов)
-pset_meta = gp.PrimitiveSetTyped(
-    "META",
-    in_types=[BOOL, BOOL],  # Входы от Long и Short популяций
-    ret_type=SCALAR,
-    prefix="SIG"
-)
+# Meta population: 2 булевых входа (long_active, short_active), выход — SCALAR
+pset_meta = gp.PrimitiveSetTyped("META", [BOOL, BOOL], SCALAR, "SIG")
 
-# Добавляем примитивы для всех популяций
+# Регистрируем примитивы для long и short
 for pset in [pset_long, pset_short]:
-    # Эфемерная константа
     pset.addEphemeralConstant("rand", partial(random.uniform, -1.0, 1.0), SCALAR)
 
-
-    # Арифметические примитивы
-    def add(a: SCALAR, b: SCALAR) -> SCALAR:
-        return a + b
-
-
-    def sub(a: SCALAR, b: SCALAR) -> SCALAR:
-        return a - b
-
-
-    def mul(a: SCALAR, b: SCALAR) -> SCALAR:
-        return a * b
-
-
-    def safe_div(a: SCALAR, b: SCALAR) -> SCALAR:
-        return a / b if abs(b) > 1e-10 else 0.0
-
-
-    pset.addPrimitive(add, [SCALAR, SCALAR], SCALAR)
-    pset.addPrimitive(sub, [SCALAR, SCALAR], SCALAR)
-    pset.addPrimitive(mul, [SCALAR, SCALAR], SCALAR)
-    pset.addPrimitive(safe_div, [SCALAR, SCALAR], SCALAR)
+    pset.addPrimitive(scalar_add, [SCALAR, SCALAR], SCALAR)
+    pset.addPrimitive(scalar_sub, [SCALAR, SCALAR], SCALAR)
+    pset.addPrimitive(scalar_mul, [SCALAR, SCALAR], SCALAR)
+    pset.addPrimitive(scalar_div, [SCALAR, SCALAR], SCALAR)
     pset.addPrimitive(scalar_gt, [SCALAR, SCALAR], SCALAR)
     pset.addPrimitive(scalar_lt, [SCALAR, SCALAR], SCALAR)
     pset.addPrimitive(scalar_eq, [SCALAR, SCALAR], SCALAR)
     pset.addPrimitive(scalar_pos, [SCALAR], SCALAR)
-    pset.addPrimitive(scalar_neg, [SCALAR], SCALAR)
+    pset.addPrimitive(scalar_neg_check, [SCALAR], SCALAR)
     pset.addPrimitive(scalar_clip01, [SCALAR], SCALAR)
-
-    # Скалярные агрегаторы
-    pset.addPrimitive(last_elem, [VECTOR], SCALAR)
-    pset.addPrimitive(scalar_mean, [VECTOR], SCALAR)
+    pset.addPrimitive(scalar_if_else, [SCALAR, SCALAR, SCALAR], SCALAR)
     pset.addPrimitive(scalar_log, [SCALAR], SCALAR)
+    pset.addPrimitive(scalar_sigmoid, [SCALAR], SCALAR)
+    pset.addPrimitive(scalar_tanh, [SCALAR], SCALAR)
 
-    # Векторные операции
+    pset.addPrimitive(last_elem, [VECTOR], SCALAR)
+    pset.addPrimitive(first_elem, [VECTOR], SCALAR)
+    pset.addPrimitive(scalar_mean, [VECTOR], SCALAR)
+    pset.addPrimitive(scalar_std, [VECTOR], SCALAR)
+    pset.addPrimitive(vec_max_elem, [VECTOR], SCALAR)
+    pset.addPrimitive(vec_min_elem, [VECTOR], SCALAR)
+    pset.addPrimitive(vec_sum, [VECTOR], SCALAR)
+
     pset.addPrimitive(vec_add, [VECTOR, VECTOR], VECTOR)
     pset.addPrimitive(vec_sub, [VECTOR, VECTOR], VECTOR)
     pset.addPrimitive(vec_add_s, [VECTOR, SCALAR], VECTOR)
@@ -1175,210 +463,222 @@ pset_meta.addPrimitive(bool_not, [BOOL], BOOL)
 pset_meta.addPrimitive(bool_xor, [BOOL, BOOL], BOOL)
 pset_meta.addPrimitive(bool_if_then_else, [BOOL, BOOL, BOOL], BOOL)
 
-
-# Арифметические операции для мета-популяции
-def meta_add(a: BOOL, b: BOOL) -> SCALAR:
+def meta_add(a, b):
     return a + b
 
-
-def meta_sub(a: BOOL, b: BOOL) -> SCALAR:
+def meta_sub(a, b):
     return a - b
 
-
-def meta_mul(a: BOOL, b: BOOL) -> SCALAR:
+def meta_mul(a, b):
     return a * b
 
+def meta_neg(a):
+    return -a
 
 pset_meta.addPrimitive(meta_add, [BOOL, BOOL], SCALAR)
 pset_meta.addPrimitive(meta_sub, [BOOL, BOOL], SCALAR)
 pset_meta.addPrimitive(meta_mul, [BOOL, BOOL], SCALAR)
-
-# Константы для мета-популяции
+pset_meta.addPrimitive(meta_neg, [BOOL], SCALAR)
+pset_meta.addPrimitive(scalar_if_else, [BOOL, SCALAR, SCALAR], SCALAR)
 pset_meta.addEphemeralConstant("meta_rand", partial(random.uniform, -2.0, 2.0), SCALAR)
 
 
-# ----- 4. Фитнес-функции для каждой популяции -----
+# =====================================================================
+# FITNESS FUNCTIONS
+# Новая логика:
+#   Long/Short выдают true/false на каждом баре.
+#   true = позиция открыта, false = позиция закрыта.
+#   Профит считается за время удержания позиции.
+# =====================================================================
 
 def evalLongTrading(ind, bars):
-    """Фитнес для Long популяции - фокус на прибыльности лонгов"""
+    """
+    Фитнес Long популяции.
+    Сигнал > 0 = лонг открыт (true), <= 0 = лонг закрыт (false).
+    Профит считается в процентах: (exit - entry) / entry * 100 - комиссия.
+    """
     func = gp.compile(ind, pset_long)
 
-    profit = 0.0
-    position = 0
+    total_pct = 0.0
+    commission = 0.001  # 0.1% за сделку (вход + выход = 0.2%)
+    was_open = False
     entry_price = 0.0
-    commission = 0.001
     trades_count = 0
 
-    for i, b in enumerate(bars):
+    for b in bars:
         try:
             sig = func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-            sig = 1 if sig > 0 else 0  # Только лонги
+            is_open = sig > 0
         except:
-            sig = 0
+            is_open = False
 
-        if position == 1 and sig == 0:  # Закрываем лонг
-            trade_profit = (b["cur"] - entry_price) - commission * (entry_price + b["cur"])
-            profit += trade_profit
-            position = 0
-            trades_count += 1
-        elif position == 0 and sig == 1:  # Открываем лонг
-            position = 1
+        if is_open and not was_open:
             entry_price = b["cur"]
+            was_open = True
+        elif not is_open and was_open:
+            # Процентный профит за сделку минус комиссия входа и выхода
+            pct = ((b["cur"] - entry_price) / entry_price) * 100 - commission * 2 * 100
+            total_pct += pct
+            was_open = False
+            trades_count += 1
 
-    # Закрываем финальную позицию
-    if position == 1 and bars:
-        trade_profit = (bars[-1]["cur"] - entry_price) - commission * (entry_price + bars[-1]["cur"])
-        profit += trade_profit
+    if was_open and bars:
+        pct = ((bars[-1]["cur"] - entry_price) / entry_price) * 100 - commission * 2 * 100
+        total_pct += pct
         trades_count += 1
 
     if trades_count == 0:
         return (-1000.0,)
 
-    return (profit,)
+    return (total_pct,)
 
 
 def evalShortTrading(ind, bars):
-    """Фитнес для Short популяции - фокус на прибыльности шортов"""
+    """
+    Фитнес Short популяции.
+    Сигнал > 0 = шорт открыт (true), <= 0 = шорт закрыт (false).
+    Профит в процентах: (entry - exit) / entry * 100 - комиссия - стоимость удержания.
+    """
     func = gp.compile(ind, pset_short)
 
-    profit = 0.0
-    position = 0
+    total_pct = 0.0
+    commission = 0.001  # 0.1%
+    short_cost_per_bar = 0.001  # 0.001% за бар удержания шорта (funding rate)
+    was_open = False
     entry_price = 0.0
-    commission = 0.001
-    short_cost = 0.00001
+    bars_held = 0
     trades_count = 0
 
-    for i, b in enumerate(bars):
+    for b in bars:
         try:
             sig = func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-            sig = -1 if sig > 0 else 0  # Только шорты
+            is_open = sig > 0
         except:
-            sig = 0
+            is_open = False
 
-        if position == -1 and sig == 0:  # Закрываем шорт
-            trade_profit = (entry_price - b["cur"]) - commission * (entry_price + b["cur"])
-            profit += trade_profit
-            position = 0
-            trades_count += 1
-        elif position == 0 and sig == -1:  # Открываем шорт
-            position = -1
+        if is_open and not was_open:
             entry_price = b["cur"]
+            bars_held = 1
+            was_open = True
+        elif is_open and was_open:
+            bars_held += 1
+        elif not is_open and was_open:
+            pct = ((entry_price - b["cur"]) / entry_price) * 100 - commission * 2 * 100 - short_cost_per_bar * bars_held
+            total_pct += pct
+            was_open = False
+            trades_count += 1
 
-        if position == -1:
-            profit -= short_cost * b["cur"]
-
-    # Закрываем финальную позицию
-    if position == -1 and bars:
-        trade_profit = (entry_price - bars[-1]["cur"]) - commission * (entry_price + bars[-1]["cur"])
-        profit += trade_profit
+    if was_open and bars:
+        pct = ((entry_price - bars[-1]["cur"]) / entry_price) * 100 - commission * 2 * 100 - short_cost_per_bar * bars_held
+        total_pct += pct
         trades_count += 1
 
     if trades_count == 0:
         return (-1000.0,)
 
-    return (profit,)
+    return (total_pct,)
 
 
 def evalMetaTrading(ind, bars, best_long_func, best_short_func):
-    """Фитнес для мета-популяции - комбинирует сигналы от Long и Short"""
+    """
+    Фитнес Meta популяции.
+    Получает 2 булевых сигнала: long_active и short_active.
+    Решает итоговое действие:
+      > 0.5  -> LONG
+      < -0.5 -> SHORT
+      иначе  -> FLAT
+    Профит в процентах с комиссией и short_cost.
+    """
     meta_func = gp.compile(ind, pset_meta)
 
-    profit = 0.0
-    position = 0
-    entry_price = 0.0
+    total_pct = 0.0
     commission = 0.001
-    short_cost = 0.00001
+    short_cost_per_bar = 0.001  # 0.001% за бар удержания шорта
+    position = 0  # 0=flat, 1=long, -1=short
+    entry_price = 0.0
+    bars_held = 0
     trades_count = 0
 
-    for i, b in enumerate(bars):
+    for b in bars:
         try:
-            # Получаем сигналы от Long и Short популяций
-            long_sig = best_long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-            short_sig = best_short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
+            long_raw = best_long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
+            short_raw = best_short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
 
-            long_bool = 1.0 if long_sig > 0 else 0.0
-            short_bool = 1.0 if short_sig > 0 else 0.0
+            long_active = 1.0 if long_raw > 0 else 0.0
+            short_active = 1.0 if short_raw > 0 else 0.0
 
-            # Мета-решение
-            final_sig = meta_func(long_bool, short_bool)
+            meta_sig = meta_func(long_active, short_active)
 
-            if final_sig > 0.5:
-                sig = 1  # Long
-            elif final_sig < -0.5:
-                sig = -1  # Short
+            if meta_sig > 0.5:
+                desired = 1
+            elif meta_sig < -0.5:
+                desired = -1
             else:
-                sig = 0  # Hold
+                desired = 0
         except:
-            sig = 0
+            desired = 0
 
-        # Торговая логика
-        if position == 1 and sig <= 0:  # Закрываем лонг
-            trade_profit = (b["cur"] - entry_price) - commission * (entry_price + b["cur"])
-            profit += trade_profit
-            position = 0
-            trades_count += 1
-        elif position == -1 and sig >= 0:  # Закрываем шорт
-            trade_profit = (entry_price - b["cur"]) - commission * (entry_price + b["cur"])
-            profit += trade_profit
-            position = 0
-            trades_count += 1
+        if position != desired:
+            # Закрываем текущую
+            if position == 1 and entry_price > 0:
+                pct = ((b["cur"] - entry_price) / entry_price) * 100 - commission * 2 * 100
+                total_pct += pct
+                trades_count += 1
+            elif position == -1 and entry_price > 0:
+                pct = ((entry_price - b["cur"]) / entry_price) * 100 - commission * 2 * 100 - short_cost_per_bar * bars_held
+                total_pct += pct
+                trades_count += 1
 
-        if position == 0:
-            if sig > 0:  # Открываем лонг
-                position = 1
+            # Открываем новую
+            if desired != 0:
                 entry_price = b["cur"]
-            elif sig < 0:  # Открываем шорт
-                position = -1
-                entry_price = b["cur"]
+                bars_held = 0
+            position = desired
 
         if position == -1:
-            profit -= short_cost * b["cur"]
+            bars_held += 1
 
-    # Закрываем финальную позицию
-    if position != 0 and bars:
+    # Закрываем в конце
+    if position != 0 and bars and entry_price > 0:
         final_price = bars[-1]["cur"]
         if position == 1:
-            trade_profit = (final_price - entry_price) - commission * (entry_price + final_price)
+            pct = ((final_price - entry_price) / entry_price) * 100 - commission * 2 * 100
         else:
-            trade_profit = (entry_price - final_price) - commission * (entry_price + final_price)
-        profit += trade_profit
+            pct = ((entry_price - final_price) / entry_price) * 100 - commission * 2 * 100 - short_cost_per_bar * bars_held
+        total_pct += pct
         trades_count += 1
 
     if trades_count == 0:
         return (-1000.0,)
 
-    return (profit,)
+    return (total_pct,)
 
 
-# ----- 5. Toolbox настройки для трех популяций -----
+# =====================================================================
+# DEAP TOOLBOX
+# =====================================================================
 
-# Создаем классы для каждой популяции
 creator.create("FitnessMax", base.Fitness, weights=(1.0,))
 creator.create("LongIndividual", gp.PrimitiveTree, fitness=creator.FitnessMax)
 creator.create("ShortIndividual", gp.PrimitiveTree, fitness=creator.FitnessMax)
 creator.create("MetaIndividual", gp.PrimitiveTree, fitness=creator.FitnessMax)
 
-# Toolbox для Long популяции
 toolbox_long = base.Toolbox()
 toolbox_long.register("expr", gp.genHalfAndHalf, pset=pset_long, min_=1, max_=4)
 toolbox_long.register("individual", tools.initIterate, creator.LongIndividual, toolbox_long.expr)
 toolbox_long.register("population", tools.initRepeat, list, toolbox_long.individual)
-toolbox_long.register("evaluate", evalLongTrading, bars=bars)
 toolbox_long.register("select", tools.selTournament, tournsize=3)
 toolbox_long.register("expr_mut", gp.genFull, min_=0, max_=2)
 toolbox_long.register("mutate", gp.mutUniform, expr=toolbox_long.expr_mut, pset=pset_long)
 
-# Toolbox для Short популяции
 toolbox_short = base.Toolbox()
 toolbox_short.register("expr", gp.genHalfAndHalf, pset=pset_short, min_=1, max_=4)
 toolbox_short.register("individual", tools.initIterate, creator.ShortIndividual, toolbox_short.expr)
 toolbox_short.register("population", tools.initRepeat, list, toolbox_short.individual)
-toolbox_short.register("evaluate", evalShortTrading, bars=bars)
 toolbox_short.register("select", tools.selTournament, tournsize=3)
 toolbox_short.register("expr_mut", gp.genFull, min_=0, max_=2)
 toolbox_short.register("mutate", gp.mutUniform, expr=toolbox_short.expr_mut, pset=pset_short)
 
-# Toolbox для Meta популяции
 toolbox_meta = base.Toolbox()
 toolbox_meta.register("expr", gp.genHalfAndHalf, pset=pset_meta, min_=1, max_=3)
 toolbox_meta.register("individual", tools.initIterate, creator.MetaIndividual, toolbox_meta.expr)
@@ -1388,11 +688,9 @@ toolbox_meta.register("expr_mut", gp.genFull, min_=0, max_=2)
 toolbox_meta.register("mutate", gp.mutUniform, expr=toolbox_meta.expr_mut, pset=pset_meta)
 
 
-# Кроссовер для всех популяций
 def cx_type_safe_size_fair(ind1, ind2, max_delta=2):
     if len(ind1) < 2 or len(ind2) < 2:
         return ind1, ind2
-
     idx1 = random.randrange(len(ind1))
     slice1 = ind1.searchSubtree(idx1)
     size1 = slice1.stop - slice1.start
@@ -1405,10 +703,8 @@ def cx_type_safe_size_fair(ind1, ind2, max_delta=2):
             size2 = slice2.stop - slice2.start
             if abs(size1 - size2) <= max_delta:
                 candidates.append((idx2, slice2))
-
     if not candidates:
         return ind1, ind2
-
     idx2, slice2 = random.choice(candidates)
     ind1[slice1], ind2[slice2] = ind2[slice2], ind1[slice1]
     return ind1, ind2
@@ -1418,409 +714,751 @@ toolbox_long.register("mate", cx_type_safe_size_fair, max_delta=2)
 toolbox_short.register("mate", cx_type_safe_size_fair, max_delta=2)
 toolbox_meta.register("mate", cx_type_safe_size_fair, max_delta=2)
 
-# Ограничения глубины
 for tb in [toolbox_long, toolbox_short, toolbox_meta]:
     tb.decorate("mutate", gp.staticLimit(key=lambda ind: ind.height, max_value=6))
     tb.decorate("mate", gp.staticLimit(key=lambda ind: ind.height, max_value=6))
 
 
-# ----- 6. Основной эволюционный алгоритм -----
-def main():
-    random.seed(42)
+# =====================================================================
+# PLOT — новая визуализация
+# =====================================================================
 
-    # Создаем популяции
-    pop_long = toolbox_long.population(n=100)
-    pop_short = toolbox_short.population(n=100)
-    pop_meta = toolbox_meta.population(n=100)
+def plot_signals(df, bars, best_long, best_short, best_meta, pset_l, pset_s, pset_m, title_prefix=""):
+    """
+    Визуализация сигналов трёх популяций.
+    Показывает:
+      1) Цену + точки входа/выхода мета-стратегии
+      2) Сигналы long/short популяций (true/false зоны)
+      3) Мета-сигнал
+    """
+    long_func = gp.compile(best_long, pset_l)
+    short_func = gp.compile(best_short, pset_s)
+    meta_func = gp.compile(best_meta, pset_m)
 
-    # Hall of Fame для каждой популяции
-    hof_long = tools.HallOfFame(3)
-    hof_short = tools.HallOfFame(3)
-    hof_meta = tools.HallOfFame(3)
+    prices = []
+    long_signals = []
+    short_signals = []
+    meta_signals = []
 
-    # Статистика
-    stats = tools.Statistics(lambda ind: ind.fitness.values[0])
-    stats.register("avg", np.mean)
-    stats.register("std", np.std)
-    stats.register("min", np.min)
-    stats.register("max", np.max)
+    long_entries, long_exits = [], []
+    short_entries, short_exits = [], []
 
-    print("Starting co-evolution with three populations...")
+    position = 0  # 0=flat, 1=long, -1=short
+    entry_price = 0.0
+    total_pct = 0.0
+    commission = 0.001
+    short_cost_per_bar = 0.001
+    bars_held = 0
 
-    # Коэволюция
-    ngen = 20
-    for gen in range(ngen):
-        print(f"\nGeneration {gen + 1}/{ngen}")
+    for i, b in enumerate(bars):
+        prices.append(b["cur"])
 
-        # Эволюция Long популяции
-        print("Evolving Long population...")
-        pop_long, _ = algorithms.eaSimple(
-            pop_long, toolbox_long,
-            cxpb=0.6, mutpb=0.3, ngen=1,
-            stats=None, halloffame=hof_long,
-            verbose=False
-        )
+        try:
+            long_raw = long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
+            short_raw = short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
 
-        # Эволюция Short популяции
-        print("Evolving Short population...")
-        pop_short, _ = algorithms.eaSimple(
-            pop_short, toolbox_short,
-            cxpb=0.6, mutpb=0.3, ngen=1,
-            stats=None, halloffame=hof_short,
-            verbose=False
-        )
+            long_active = 1.0 if long_raw > 0 else 0.0
+            short_active = 1.0 if short_raw > 0 else 0.0
 
-        # Получаем лучших представителей для мета-популяции
-        if hof_long and hof_short:
-            best_long_func = gp.compile(hof_long[0], pset_long)
-            best_short_func = gp.compile(hof_short[0], pset_short)
+            meta_raw = meta_func(long_active, short_active)
 
-            # Регистрируем фитнес для мета-популяции с текущими лучшими
-            toolbox_meta.register("evaluate", evalMetaTrading,
-                                  bars=bars,
-                                  best_long_func=best_long_func,
-                                  best_short_func=best_short_func)
+            if meta_raw > 0.5:
+                desired = 1
+            elif meta_raw < -0.5:
+                desired = -1
+            else:
+                desired = 0
+        except:
+            long_active = 0.0
+            short_active = 0.0
+            meta_raw = 0.0
+            desired = 0
 
-            # Эволюция Meta популяции
-            print("Evolving Meta population...")
-            pop_meta, _ = algorithms.eaSimple(
-                pop_meta, toolbox_meta,
-                cxpb=0.6, mutpb=0.3, ngen=1,
-                stats=None, halloffame=hof_meta,
-                verbose=False
-            )
+        long_signals.append(long_active)
+        short_signals.append(short_active)
+        meta_signals.append(meta_raw)
 
-            # Выводим статистику текущего поколения
-            long_fitness = [ind.fitness.values[0] for ind in pop_long if ind.fitness.valid]
-            short_fitness = [ind.fitness.values[0] for ind in pop_short if ind.fitness.valid]
-            meta_fitness = [ind.fitness.values[0] for ind in pop_meta if ind.fitness.valid]
+        # Торговая логика
+        if position != desired:
+            # Закрываем текущую позицию
+            if position == 1 and entry_price > 0:
+                pct = ((b["cur"] - entry_price) / entry_price) * 100 - commission * 2 * 100
+                total_pct += pct
+                long_exits.append((i, b["cur"]))
+            elif position == -1 and entry_price > 0:
+                pct = ((entry_price - b["cur"]) / entry_price) * 100 - commission * 2 * 100 - short_cost_per_bar * bars_held
+                total_pct += pct
+                short_exits.append((i, b["cur"]))
 
-            print(f"Long - Max: {max(long_fitness):.2f}, Avg: {np.mean(long_fitness):.2f}")
-            print(f"Short - Max: {max(short_fitness):.2f}, Avg: {np.mean(short_fitness):.2f}")
-            print(f"Meta - Max: {max(meta_fitness):.2f}, Avg: {np.mean(meta_fitness):.2f}")
+            # Открываем новую
+            if desired == 1:
+                long_entries.append((i, b["cur"]))
+                entry_price = b["cur"]
+                bars_held = 0
+            elif desired == -1:
+                short_entries.append((i, b["cur"]))
+                entry_price = b["cur"]
+                bars_held = 0
 
-    print("\n=== FINAL RESULTS ===")
-    print(f"Best Long fitness: {hof_long[0].fitness.values[0]:.2f}")
-    print(f"Best Long individual: {str(hof_long[0])}")
-    print(f"\nBest Short fitness: {hof_short[0].fitness.values[0]:.2f}")
-    print(f"Best Short individual: {str(hof_short[0])}")
-    print(f"\nBest Meta fitness: {hof_meta[0].fitness.values[0]:.2f}")
-    print(f"Best Meta individual: {str(hof_meta[0])}")
+            position = desired
 
-    # Показываем результаты лучшей комбинированной стратегии
+        if position == -1:
+            bars_held += 1
+
+    # Закрываем в конце
+    if position == 1 and bars and entry_price > 0:
+        pct = ((bars[-1]["cur"] - entry_price) / entry_price) * 100 - commission * 2 * 100
+        total_pct += pct
+        long_exits.append((len(bars) - 1, bars[-1]["cur"]))
+    elif position == -1 and bars and entry_price > 0:
+        pct = ((entry_price - bars[-1]["cur"]) / entry_price) * 100 - commission * 2 * 100 - short_cost_per_bar * bars_held
+        total_pct += pct
+        short_exits.append((len(bars) - 1, bars[-1]["cur"]))
+
+    # ----- РИСУЕМ -----
+    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(18, 14), gridspec_kw={'height_ratios': [3, 1, 1]})
+
+    # === Subplot 1: Цена + сделки ===
+    ax1.plot(prices, label="Price", color='black', linewidth=1, alpha=0.8)
+
+    if long_entries:
+        xs, ys = zip(*long_entries)
+        ax1.scatter(xs, ys, marker="^", s=120, color='green', zorder=5, label="LONG ENTRY")
+    if long_exits:
+        xs, ys = zip(*long_exits)
+        ax1.scatter(xs, ys, marker="v", s=120, color='darkgreen', zorder=5, label="LONG EXIT")
+    if short_entries:
+        xs, ys = zip(*short_entries)
+        ax1.scatter(xs, ys, marker="v", s=120, color='red', zorder=5, label="SHORT ENTRY")
+    if short_exits:
+        xs, ys = zip(*short_exits)
+        ax1.scatter(xs, ys, marker="^", s=120, color='darkred', zorder=5, label="SHORT EXIT")
+
+    # Подсветка зон лонга/шорта на ценовом графике
+    for i in range(len(prices) - 1):
+        if long_signals[i] > 0.5:
+            ax1.axvspan(i, i + 1, alpha=0.05, color='green')
+        if short_signals[i] > 0.5:
+            ax1.axvspan(i, i + 1, alpha=0.05, color='red')
+
+    ax1.set_title(f"{title_prefix}Three Population Strategy — Total Return: {total_pct:.2f}%", fontsize=14)
+    ax1.set_ylabel("Price")
+    ax1.legend(loc='upper left')
+    ax1.grid(True, alpha=0.3)
+
+    # === Subplot 2: Сигналы Long/Short популяций (true/false) ===
+    ax2.fill_between(range(len(long_signals)), long_signals, alpha=0.4, color='green',
+                     step='post', label='Long Active (true/false)')
+    ax2.fill_between(range(len(short_signals)), [-s for s in short_signals], alpha=0.4, color='red',
+                     step='post', label='Short Active (true/false)')
+    ax2.axhline(y=0, color='gray', linestyle='-', linewidth=0.5)
+    ax2.set_ylabel("Population Signals")
+    ax2.set_ylim(-1.3, 1.3)
+    ax2.legend(loc='upper left', fontsize=8)
+    ax2.grid(True, alpha=0.3)
+
+    # === Subplot 3: Мета-сигнал ===
+    ax3.plot(meta_signals, label='Meta Signal', color='purple', linewidth=1)
+    ax3.axhline(y=0.5, color='green', linestyle='--', alpha=0.5, label='Long threshold')
+    ax3.axhline(y=-0.5, color='red', linestyle='--', alpha=0.5, label='Short threshold')
+    ax3.fill_between(range(len(meta_signals)), meta_signals, 0.5,
+                     where=[m > 0.5 for m in meta_signals], alpha=0.2, color='green')
+    ax3.fill_between(range(len(meta_signals)), meta_signals, -0.5,
+                     where=[m < -0.5 for m in meta_signals], alpha=0.2, color='red')
+    ax3.set_ylabel("Meta Signal")
+    ax3.set_xlabel("Bar")
+    ax3.legend(loc='upper left', fontsize=8)
+    ax3.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig("backtest_result.png", dpi=150, bbox_inches='tight')
+    plt.show()
+
+    trades = len(long_entries) + len(short_entries)
+    print(f"\nTrades: {trades}, Total Return: {total_pct:.2f}%")
+    if trades > 0:
+        print(f"Avg return per trade: {total_pct / trades:.2f}%")
+
+    # Распечатаем статистику сигналов
+    total_bars = len(bars)
+    long_active_count = sum(1 for s in long_signals if s > 0.5)
+    short_active_count = sum(1 for s in short_signals if s > 0.5)
+    print(f"\nLong population active: {long_active_count}/{total_bars} bars ({long_active_count/total_bars*100:.1f}%)")
+    print(f"Short population active: {short_active_count}/{total_bars} bars ({short_active_count/total_bars*100:.1f}%)")
+
+
+# =====================================================================
+# PERFORMANCE METRICS  (bot vs buy & hold)
+# =====================================================================
+
+def compute_metrics(equity_curve: list, trades_pnl: list,
+                    bars_per_year: float = 24 * 365,
+                    risk_free_rate: float = 0.0) -> dict:
+    """
+    Считает риск-метрики по equity-кривой и списку pnl сделок.
+    bars_per_year=24*365 для часового таймфрейма крипты (24/7).
+    """
+    if len(equity_curve) < 2:
+        return {}
+
+    eq = np.asarray(equity_curve, dtype=float)
+    rets = np.diff(eq) / eq[:-1]
+    rets = rets[np.isfinite(rets)]
+
+    if len(rets) == 0:
+        return {}
+
+    mu = rets.mean()
+    sigma = rets.std(ddof=1) if len(rets) > 1 else 0.0
+    downside = rets[rets < 0]
+    sigma_down = downside.std(ddof=1) if len(downside) > 1 else 0.0
+
+    ann_factor = math.sqrt(bars_per_year)
+    rf_per_bar = risk_free_rate / bars_per_year
+    sharpe = (mu - rf_per_bar) / sigma * ann_factor if sigma > 0 else 0.0
+    sortino = (mu - rf_per_bar) / sigma_down * ann_factor if sigma_down > 0 else 0.0
+
+    years = len(rets) / bars_per_year
+    cagr = (eq[-1] / eq[0]) ** (1 / years) - 1 if years > 0 and eq[0] > 0 else 0.0
+
+    running_max = np.maximum.accumulate(eq)
+    drawdowns = (running_max - eq) / running_max
+    max_dd = drawdowns.max() if len(drawdowns) > 0 else 0.0
+
+    calmar = cagr / max_dd if max_dd > 0 else float('inf')
+
+    wins = [p for p in trades_pnl if p > 0]
+    losses = [p for p in trades_pnl if p < 0]
+    win_rate = len(wins) / len(trades_pnl) if trades_pnl else 0.0
+    avg_win = np.mean(wins) if wins else 0.0
+    avg_loss = np.mean(losses) if losses else 0.0
+    profit_factor = (sum(wins) / abs(sum(losses))) if losses and sum(losses) != 0 else float('inf')
+    expectancy = win_rate * avg_win - (1 - win_rate) * abs(avg_loss)
+
+    return {
+        'Total Return (%)': (eq[-1] / eq[0] - 1) * 100,
+        'CAGR (%)': cagr * 100,
+        'Max Drawdown (%)': max_dd * 100,
+        'Sharpe (ann.)': sharpe,
+        'Sortino (ann.)': sortino,
+        'Calmar': calmar,
+        'Volatility (ann. %)': sigma * ann_factor * 100,
+        'Win Rate (%)': win_rate * 100,
+        'Profit Factor': profit_factor,
+        'Expectancy (per trade)': expectancy,
+        'Avg Win': avg_win,
+        'Avg Loss': avg_loss,
+        'Total Trades': len(trades_pnl),
+    }
+
+
+def buy_and_hold_benchmark(bars: list, initial_balance: float = 10000,
+                           commission: float = 0.001) -> dict:
+    """
+    Эталонная стратегия: купить на первом баре, держать до конца.
+    Возвращает метрики, сопоставимые с compute_metrics().
+    """
+    if not bars:
+        return {}
+
+    entry_price = bars[0]["cur"]
+    qty = initial_balance * (1 - commission) / entry_price  # учли комиссию входа
+
+    equity = []
+    for b in bars:
+        equity.append(qty * b["cur"])
+
+    # учли комиссию выхода в конце
+    equity[-1] *= (1 - commission)
+
+    final_pnl = equity[-1] - initial_balance
+    return compute_metrics(equity, [final_pnl])
+
+
+def compare_strategies(bars: list, hofs, initial_balance: float = 10000,
+                       risk_percent: float = 0.02, label: str = ""):
+    """
+    Прогоняет GP-бота и buy & hold на одних и тех же барах,
+    печатает сравнительную таблицу метрик.
+
+    risk_percent: 0.02 = 2% сайзинг (риск-менеджмент), 1.0 = полная экспозиция.
+    label: подпись для заголовка таблицы.
+    """
+    if not bars:
+        print("compare_strategies: empty bars, skipping.")
+        return {}, {}
+
+    hof_long, hof_short, hof_meta = hofs
+    best_long_func = gp.compile(hof_long[0], pset_long)
+    best_short_func = gp.compile(hof_short[0], pset_short)
+    meta_func = gp.compile(hof_meta[0], pset_meta)
+
+    # --- Бот ---
+    sim = TradingSimulator(initial_balance=initial_balance, commission=0.001,
+                           risk_percent=risk_percent)
+    trades_pnl = []
+
+    for b in bars:
+        try:
+            long_raw = best_long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
+            short_raw = best_short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
+            la = 1.0 if long_raw > 0 else 0.0
+            sa = 1.0 if short_raw > 0 else 0.0
+            meta = meta_func(la, sa)
+            if meta > 0.5:
+                action = 'LONG'
+            elif meta < -0.5:
+                action = 'SHORT'
+            else:
+                action = 'CLOSE' if sim.position_type != 'FLAT' else 'HOLD'
+        except Exception:
+            action = 'HOLD'
+
+        trade = sim.execute_trade(timestamp=None, action=action, price=b["cur"])
+        if trade and trade.pnl != 0.0:
+            trades_pnl.append(trade.pnl)
+
+    sim.close_position(timestamp=None, price=bars[-1]["cur"])
+    bot_metrics = compute_metrics(sim.equity_curve, trades_pnl)
+
+    # --- Buy & Hold ---
+    bh_metrics = buy_and_hold_benchmark(bars, initial_balance=initial_balance)
+
+    # --- Печать ---
+    title = f" [{label}]" if label else ""
+    print("\n" + "=" * 70)
+    print(f"STRATEGY COMPARISON{title}  (risk_percent = {risk_percent:.0%})")
+    print("=" * 70)
+    print(f"{'Metric':<25}{'Bot (GP)':>20}{'Buy & Hold':>20}")
+    print("-" * 70)
+    keys = sorted(set(bot_metrics) | set(bh_metrics))
+    for k in keys:
+        bv = bot_metrics.get(k, float('nan'))
+        hv = bh_metrics.get(k, float('nan'))
+        bv_s = f"{bv:>20.4f}" if isinstance(bv, (int, float)) else f"{bv:>20}"
+        hv_s = f"{hv:>20.4f}" if isinstance(hv, (int, float)) else f"{hv:>20}"
+        print(f"{k:<25}{bv_s}{hv_s}")
+    print("=" * 70)
+
+    # equity curve B&H для построения графиков
+    bh_entry = bars[0]["cur"]
+    bh_qty = initial_balance * (1 - 0.001) / bh_entry
+    bh_equity = [bh_qty * b["cur"] for b in bars]
+    bh_equity[-1] *= (1 - 0.001)
+
+    return bot_metrics, bh_metrics, list(sim.equity_curve), bh_equity
+
+
+# =====================================================================
+# PLOT — equity curve бот vs Buy & Hold (для рис. 3.2 и 3.4 курсовой)
+# =====================================================================
+
+def plot_equity_comparison(bot_equity, bh_equity, title, filename,
+                           initial_balance=10000):
+    """
+    Рисует две кривые капитала на одном графике: бот vs B&H.
+    Дополнительно показывает зоны просадки.
+    Используется в курсовой как рис. 3.2 (бычий рынок) и рис. 3.4 (боковой).
+    """
+    n = min(len(bot_equity), len(bh_equity))
+    if n < 2:
+        print(f"plot_equity_comparison: недостаточно данных для '{title}'")
+        return
+
+    bot_eq = np.asarray(bot_equity[:n], dtype=float)
+    bh_eq = np.asarray(bh_equity[:n], dtype=float)
+    x = np.arange(n)
+
+    bot_run_max = np.maximum.accumulate(bot_eq)
+    bot_dd = (bot_run_max - bot_eq) / bot_run_max * 100
+    bh_run_max = np.maximum.accumulate(bh_eq)
+    bh_dd = (bh_run_max - bh_eq) / bh_run_max * 100
+
+    fig, (ax_eq, ax_dd) = plt.subplots(
+        2, 1, figsize=(12, 8),
+        gridspec_kw={'height_ratios': [3, 1]}, sharex=True,
+    )
+
+    ax_eq.plot(x, bot_eq, label='EagleTrade (бот)', color='#1f77b4', linewidth=1.8)
+    ax_eq.plot(x, bh_eq, label='Buy & Hold', color='#d62728', linewidth=1.8, linestyle='--')
+    ax_eq.axhline(y=initial_balance, color='gray', linestyle=':', linewidth=0.8,
+                  label=f'Начальный капитал ({initial_balance:.0f})')
+    ax_eq.set_title(title, fontsize=13)
+    ax_eq.set_ylabel('Капитал, USDT')
+    ax_eq.legend(loc='best')
+    ax_eq.grid(True, alpha=0.3)
+
+    ax_dd.fill_between(x, 0, -bot_dd, color='#1f77b4', alpha=0.4, label='Просадка бота')
+    ax_dd.fill_between(x, 0, -bh_dd, color='#d62728', alpha=0.3, label='Просадка B&H')
+    ax_dd.set_ylabel('Просадка, %')
+    ax_dd.set_xlabel('Час (бар)')
+    ax_dd.legend(loc='lower left', fontsize=9)
+    ax_dd.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(filename, dpi=150, bbox_inches='tight')
+    print(f"  → сохранён график: {filename}")
+    plt.show()
+
+
+# =====================================================================
+# PLOT — сводная гистограмма по двум периодам (для рис. 3.5 курсовой)
+# =====================================================================
+
+def plot_summary_bars(results, filename="summary_bars.png"):
+    """
+    Сводная гистограмма доходности и максимальной просадки
+    по двум отложенным периодам для бота и Buy & Hold.
+
+    results — список словарей вида:
+      {'period': 'Февраль 2024 (бычий)',
+       'bot':  {'Total Return (%)': ..., 'Max Drawdown (%)': ...},
+       'bh':   {'Total Return (%)': ..., 'Max Drawdown (%)': ...}}
+    """
+    if not results:
+        print("plot_summary_bars: пустой список результатов")
+        return
+
+    periods = [r['period'] for r in results]
+    bot_ret = [r['bot'].get('Total Return (%)', 0.0) for r in results]
+    bh_ret = [r['bh'].get('Total Return (%)', 0.0) for r in results]
+    bot_dd = [r['bot'].get('Max Drawdown (%)', 0.0) for r in results]
+    bh_dd = [r['bh'].get('Max Drawdown (%)', 0.0) for r in results]
+
+    x = np.arange(len(periods))
+    width = 0.35
+
+    fig, (ax_ret, ax_dd) = plt.subplots(1, 2, figsize=(13, 5))
+
+    bars1 = ax_ret.bar(x - width / 2, bot_ret, width,
+                       label='EagleTrade (бот)', color='#1f77b4')
+    bars2 = ax_ret.bar(x + width / 2, bh_ret, width,
+                       label='Buy & Hold', color='#d62728')
+    ax_ret.axhline(y=0, color='black', linewidth=0.6)
+    ax_ret.set_title('Доходность за период')
+    ax_ret.set_ylabel('Доходность, %')
+    ax_ret.set_xticks(x)
+    ax_ret.set_xticklabels(periods)
+    ax_ret.legend()
+    ax_ret.grid(True, alpha=0.3, axis='y')
+    for b in list(bars1) + list(bars2):
+        h = b.get_height()
+        offset = 0.4 if h >= 0 else -1.2
+        ax_ret.text(b.get_x() + b.get_width() / 2, h + offset,
+                    f'{h:.2f}%', ha='center', fontsize=9)
+
+    bars3 = ax_dd.bar(x - width / 2, bot_dd, width,
+                      label='EagleTrade (бот)', color='#1f77b4')
+    bars4 = ax_dd.bar(x + width / 2, bh_dd, width,
+                      label='Buy & Hold', color='#d62728')
+    ax_dd.set_title('Максимальная просадка')
+    ax_dd.set_ylabel('Просадка, %')
+    ax_dd.set_xticks(x)
+    ax_dd.set_xticklabels(periods)
+    ax_dd.legend()
+    ax_dd.grid(True, alpha=0.3, axis='y')
+    for b in list(bars3) + list(bars4):
+        h = b.get_height()
+        ax_dd.text(b.get_x() + b.get_width() / 2, h + 0.1,
+                   f'{h:.2f}%', ha='center', fontsize=9)
+
+    plt.suptitle('Сводное сравнение EagleTrade и Buy & Hold по двум периодам',
+                 fontsize=13)
+    plt.tight_layout()
+    plt.savefig(filename, dpi=150, bbox_inches='tight')
+    print(f"  → сохранён график: {filename}")
+    plt.show()
+
+
+# =====================================================================
+# MAIN — коэволюция трёх популяций
+# =====================================================================
+
+def evolve_one_gen(pop, toolbox, hof, mu=100, lambda_=150, cxpb=0.6, mutpb=0.3):
+    """
+    Один шаг (μ+λ) эволюции:
+    - Генерим lambda_ потомков через кроссовер и мутацию
+    - Объединяем родителей + потомков
+    - Отбираем mu лучших
+    Лучшие ВСЕГДА выживают — нет деградации.
+    """
+    offspring = algorithms.varOr(pop, toolbox, lambda_=lambda_, cxpb=cxpb, mutpb=mutpb)
+
+    invalid = [ind for ind in offspring if not ind.fitness.valid]
+    fitnesses = list(map(toolbox.evaluate, invalid))
+    for ind, fit in zip(invalid, fitnesses):
+        ind.fitness.values = fit
+
+    combined = pop + offspring
+    pop[:] = tools.selBest(combined, mu)
+
+    hof.update(pop)
+    return pop
+
+
+def main(seed=None):
+    if seed is None:
+        seed = int(datetime.now().timestamp() * 1000) % (2**31)
+    random.seed(seed)
+    print(f"Random seed: {seed}  (передай в main(seed={seed}) чтобы воспроизвести)")
+
+    POP_SIZE = 150
+    OFFSPRING = 200
+    NGEN = 30
+
+    pop_long = toolbox_long.population(n=POP_SIZE)
+    pop_short = toolbox_short.population(n=POP_SIZE)
+    pop_meta = toolbox_meta.population(n=POP_SIZE)
+
+    hof_long = tools.HallOfFame(5)
+    hof_short = tools.HallOfFame(5)
+    hof_meta = tools.HallOfFame(5)
+
+    toolbox_long.register("evaluate", evalLongTrading, bars=bars)
+    toolbox_short.register("evaluate", evalShortTrading, bars=bars)
+
+    for pop, tb in [(pop_long, toolbox_long), (pop_short, toolbox_short)]:
+        fitnesses = list(map(tb.evaluate, pop))
+        for ind, fit in zip(pop, fitnesses):
+            ind.fitness.values = fit
+
+    hof_long.update(pop_long)
+    hof_short.update(pop_short)
+
+    print("=" * 60)
+    print("Starting co-evolution with three populations (μ+λ)")
+    print(f"Bars: {len(bars)}, Pop: {POP_SIZE}, Offspring: {OFFSPRING}, Gen: {NGEN}")
+    print("Signal logic: true = position open, false = position closed")
+    print("=" * 60)
+
+    for gen in range(NGEN):
+        print(f"\n--- Generation {gen + 1}/{NGEN} ---")
+
+        pop_long = evolve_one_gen(pop_long, toolbox_long, hof_long,
+                                  mu=POP_SIZE, lambda_=OFFSPRING)
+
+        pop_short = evolve_one_gen(pop_short, toolbox_short, hof_short,
+                                   mu=POP_SIZE, lambda_=OFFSPRING)
+
+        best_long_func = gp.compile(hof_long[0], pset_long)
+        best_short_func = gp.compile(hof_short[0], pset_short)
+
+        toolbox_meta.register("evaluate", evalMetaTrading,
+                              bars=bars,
+                              best_long_func=best_long_func,
+                              best_short_func=best_short_func)
+
+        if gen == 0:
+            fitnesses = list(map(toolbox_meta.evaluate, pop_meta))
+            for ind, fit in zip(pop_meta, fitnesses):
+                ind.fitness.values = fit
+            hof_meta.update(pop_meta)
+
+        pop_meta = evolve_one_gen(pop_meta, toolbox_meta, hof_meta,
+                                  mu=POP_SIZE, lambda_=OFFSPRING)
+
+        long_fit = [ind.fitness.values[0] for ind in pop_long]
+        short_fit = [ind.fitness.values[0] for ind in pop_short]
+        meta_fit = [ind.fitness.values[0] for ind in pop_meta]
+
+        print(f"  Long  — max: {max(long_fit):8.2f}%, avg: {np.mean(long_fit):8.2f}%")
+        print(f"  Short — max: {max(short_fit):8.2f}%, avg: {np.mean(short_fit):8.2f}%")
+        print(f"  Meta  — max: {max(meta_fit):8.2f}%, avg: {np.mean(meta_fit):8.2f}%")
+
+    print("\n" + "=" * 60)
+    print("FINAL RESULTS")
+    print("=" * 60)
+    print(f"Best Long fitness:  {hof_long[0].fitness.values[0]:.2f}%")
+    print(f"Best Long:  {str(hof_long[0])}")
+    print(f"\nBest Short fitness: {hof_short[0].fitness.values[0]:.2f}%")
+    print(f"Best Short: {str(hof_short[0])}")
+    print(f"\nBest Meta fitness:  {hof_meta[0].fitness.values[0]:.2f}%")
+    print(f"Best Meta:  {str(hof_meta[0])}")
+
     plot_signals(ndf, bars, hof_long[0], hof_short[0], hof_meta[0],
-                 pset_long, pset_short, pset_meta)
+                 pset_long, pset_short, pset_meta,
+                 title_prefix="[TRAIN] ")
 
     return (pop_long, pop_short, pop_meta), (hof_long, hof_short, hof_meta)
 
 
-def interpret_signals(bars, long_individual, short_individual, meta_individual,
-                      pset_long, pset_short, pset_meta):
+def validate_on_new_data(hofs, val_symbol="BTCUSDT", val_interval="1h",
+                         val_start="02-01-2024", val_end="03-01-2024"):
     """
-    Интерпретатор сигналов для анализа работы трех популяций
-    Возвращает детальную информацию о сигналах
+    Прогоняет лучших индивидов на новых данных (out-of-sample).
+    Загружает новый кусок, строит индикаторы, выводит график и статистику.
+    Возвращает кортеж (val_df, val_bars). При ошибке возвращает (None, []).
     """
-    long_func = gp.compile(long_individual, pset_long)
-    short_func = gp.compile(short_individual, pset_short)
-    meta_func = gp.compile(meta_individual, pset_meta)
+    hof_long, hof_short, hof_meta = hofs
 
-    signals_data = []
+    print("\n" + "=" * 60)
+    print(f"OUT-OF-SAMPLE VALIDATION")
+    print(f"Symbol: {val_symbol}, Interval: {val_interval}")
+    print(f"Period: {val_start} — {val_end}")
+    print("=" * 60)
 
-    for i, b in enumerate(bars[:100]):  # Анализируем первые 100 баров
-        try:
-            # Сигналы от каждой популяции
-            long_raw = long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-            short_raw = short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
+    val_df = get_history_data(val_symbol, val_interval, val_start, val_end)
+    val_df = add_indicators(val_df, window=50)
+    val_bars = build_input_vectors(val_df, min_window=50)
 
-            # Преобразуем в булевы
-            long_bool = 1.0 if long_raw > 0 else 0.0
-            short_bool = 1.0 if short_raw > 0 else 0.0
+    print(f"Validation bars: {len(val_bars)}")
 
-            # Финальный сигнал от мета-популяции
-            meta_raw = meta_func(long_bool, short_bool)
+    if len(val_bars) == 0:
+        print("ERROR: Нет данных для валидации!")
+        return None, []
 
-            # Интерпретация финального сигнала
-            if meta_raw > 0.5:
-                final_action = "LONG"
-            elif meta_raw < -0.5:
-                final_action = "SHORT"
-            else:
-                final_action = "HOLD"
+    best_long = hof_long[0]
+    best_short = hof_short[0]
+    best_meta = hof_meta[0]
 
-            signals_data.append({
-                'bar': i,
-                'price': b["cur"],
-                'long_raw': long_raw,
-                'short_raw': short_raw,
-                'long_bool': long_bool,
-                'short_bool': short_bool,
-                'meta_raw': meta_raw,
-                'final_action': final_action
-            })
+    long_fit = evalLongTrading(best_long, val_bars)
+    short_fit = evalShortTrading(best_short, val_bars)
 
-        except Exception as e:
-            signals_data.append({
-                'bar': i,
-                'price': b["cur"],
-                'long_raw': 0,
-                'short_raw': 0,
-                'long_bool': 0,
-                'short_bool': 0,
-                'meta_raw': 0,
-                'final_action': 'ERROR'
-            })
+    long_func = gp.compile(best_long, pset_long)
+    short_func = gp.compile(best_short, pset_short)
+    meta_fit = evalMetaTrading(best_meta, val_bars, long_func, short_func)
 
-    # Создаем DataFrame для анализа
-    df_signals = pd.DataFrame(signals_data)
+    print(f"\nValidation fitness:")
+    print(f"  Long:  {long_fit[0]:.2f}%")
+    print(f"  Short: {short_fit[0]:.2f}%")
+    print(f"  Meta:  {meta_fit[0]:.2f}%")
 
-    print("\n=== SIGNAL ANALYSIS ===")
-    print("Action distribution:")
-    print(df_signals['final_action'].value_counts())
+    plot_signals(val_df, val_bars, best_long, best_short, best_meta,
+                 pset_long, pset_short, pset_meta,
+                 title_prefix="[VALIDATION] ")
 
-    print(f"\nLong signals activated: {df_signals['long_bool'].sum():.0f} times")
-    print(f"Short signals activated: {df_signals['short_bool'].sum():.0f} times")
-
-    print("\nFirst 10 signals:")
-    print(df_signals[['bar', 'price', 'long_bool', 'short_bool', 'meta_raw', 'final_action']].head(10))
-
-    return df_signals
+    return val_df, val_bars
 
 
-def test_best_individuals():
-    """
-    Быстрое тестирование с лучшими найденными индивидами
-    Замените строки ниже на ваших лучших индивидов из результатов эволюции
-    """
+# =====================================================================
+# DATA LOADING & ENTRY POINT
+# =====================================================================
 
-    # ВСТАВЬТЕ СЮДА ЛУЧШИХ ИНДИВИДОВ ИЗ ВАШЕГО ЗАПУСКА
-    # Примеры (замените на реальные результаты):
-    best_long_str = "scalar_gt(last_elem(vec_sub(IN0, IN1)), scalar_mean(IN2))"
-    best_short_str = "scalar_lt(scalar_mean(vec_add(IN0, IN3)), last_elem(IN1))"
-    best_meta_str = "bool_and(SIG0, bool_not(SIG1))"
+def load_period(symbol, interval, start, end, window=50):
+    """Загружает один период, добавляет индикаторы, возвращает (df, bars)."""
+    df = get_history_data(symbol, interval, start, end)
+    df = add_indicators(df, window=window)
+    bars = build_input_vectors(df, min_window=window)
+    return df, bars
 
-    print("=== TESTING BEST INDIVIDUALS ===")
-    print(f"Best Long: {best_long_str}")
-    print(f"Best Short: {best_short_str}")
-    print(f"Best Meta: {best_meta_str}")
-    print()
+# ПОДГОТОВКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ НА СМЕСИ РЫНОЧНЫХ РЕЖИМОВ
+# ---------------------------------------------------------------------
+# Чтобы бот не выучился только «ловить тренд», обучаем его сразу
+# на двух разных режимах рынка:
+#   • январь 2024 — восходящий тренд (~+10%)
+#   • сентябрь 2023 — боковой рынок (~+4%)
+print("Loading TRAIN data: январь 2024 (тренд) + сентябрь 2023 (флэт)...")
+ndf_trend, bars_trend = load_period("BTCUSDT", "1h", "01-01-2024", "02-01-2024")
+ndf_flat, bars_flat = load_period("BTCUSDT", "1h", "09-01-2023", "10-01-2023")
 
-    # Создаем индивидов из строк
-    try:
-        best_long = gp.PrimitiveTree.from_string(best_long_str, pset_long)
-        best_short = gp.PrimitiveTree.from_string(best_short_str, pset_short)
-        best_meta = gp.PrimitiveTree.from_string(best_meta_str, pset_meta)
-
-        # Компилируем функции
-        long_func = gp.compile(best_long, pset_long)
-        short_func = gp.compile(best_short, pset_short)
-        meta_func = gp.compile(best_meta, pset_meta)
-
-        # Тестируем каждую популяцию отдельно
-        print("=== INDIVIDUAL POPULATION PERFORMANCE ===")
-
-        # Тест Long популяции
-        long_fitness = evalLongTrading(best_long, bars)
-        print(f"Long Population Fitness: {long_fitness[0]:.2f}")
-
-        # Тест Short популяции
-        short_fitness = evalShortTrading(best_short, bars)
-        print(f"Short Population Fitness: {short_fitness[0]:.2f}")
-
-        # Тест Meta популяции
-        meta_fitness = evalMetaTrading(best_meta, bars, long_func, short_func)
-        print(f"Meta Population Fitness: {meta_fitness[0]:.2f}")
-
-        print("\n=== COMBINED STRATEGY RESULTS ===")
-
-        # Показываем график комбинированной стратегии
-        plot_signals(ndf, bars, best_long, best_short, best_meta,
-                     pset_long, pset_short, pset_meta)
-
-        # Детальный анализ сигналов
-        signals_df = analyze_signals_detailed(bars, best_long, best_short, best_meta,
-                                              pset_long, pset_short, pset_meta)
-
-        return best_long, best_short, best_meta, signals_df
-
-    except Exception as e:
-        print(f"Ошибка при создании индивидов: {e}")
-        print("Убедитесь, что строки индивидов корректны и соответствуют primitive sets")
-        return None, None, None, None
-
-
-def analyze_signals_detailed(bars, long_individual, short_individual, meta_individual,
-                             pset_long, pset_short, pset_meta, num_bars=50):
-    """
-    Детальный анализ работы сигналов
-    """
-    long_func = gp.compile(long_individual, pset_long)
-    short_func = gp.compile(short_individual, pset_short)
-    meta_func = gp.compile(meta_individual, pset_meta)
-
-    signals_data = []
-
-    print(f"\n=== DETAILED SIGNAL ANALYSIS (First {num_bars} bars) ===")
-    print("Bar | Price  | Long_Raw | Short_Raw | Long_Bool | Short_Bool | Meta_Raw | Action")
-    print("-" * 80)
-
-    for i, b in enumerate(bars[:num_bars]):
-        try:
-            # Сигналы от каждой популяции
-            long_raw = long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-            short_raw = short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-
-            # Преобразуем в булевы
-            long_bool = 1.0 if long_raw > 0 else 0.0
-            short_bool = 1.0 if short_raw > 0 else 0.0
-
-            # Финальный сигнал от мета-популяции
-            meta_raw = meta_func(long_bool, short_bool)
-
-            # Интерпретация финального сигнала
-            if meta_raw > 0.5:
-                final_action = "LONG"
-            elif meta_raw < -0.5:
-                final_action = "SHORT"
-            else:
-                final_action = "HOLD"
-
-            signals_data.append({
-                'bar': i,
-                'price': b["cur"],
-                'long_raw': long_raw,
-                'short_raw': short_raw,
-                'long_bool': long_bool,
-                'short_bool': short_bool,
-                'meta_raw': meta_raw,
-                'final_action': final_action
-            })
-
-            print(f"{i:3d} | {b['cur']:6.1f} | {long_raw:8.3f} | {short_raw:9.3f} | "
-                  f"{long_bool:9.1f} | {short_bool:10.1f} | {meta_raw:8.3f} | {final_action}")
-
-        except Exception as e:
-            signals_data.append({
-                'bar': i,
-                'price': b["cur"],
-                'long_raw': 0,
-                'short_raw': 0,
-                'long_bool': 0,
-                'short_bool': 0,
-                'meta_raw': 0,
-                'final_action': 'ERROR'
-            })
-            print(f"{i:3d} | {b['cur']:6.1f} | ERROR: {str(e)[:50]}")
-
-    # Создаем DataFrame для анализа
-    df_signals = pd.DataFrame(signals_data)
-
-    print(f"\n=== SIGNAL STATISTICS ===")
-    print("Final Action Distribution:")
-    action_counts = df_signals['final_action'].value_counts()
-    for action, count in action_counts.items():
-        print(f"  {action}: {count} ({count / len(df_signals) * 100:.1f}%)")
-
-    print(f"\nLong signals activated: {df_signals['long_bool'].sum():.0f}/{len(df_signals)} "
-          f"({df_signals['long_bool'].sum() / len(df_signals) * 100:.1f}%)")
-    print(f"Short signals activated: {df_signals['short_bool'].sum():.0f}/{len(df_signals)} "
-          f"({df_signals['short_bool'].sum() / len(df_signals) * 100:.1f}%)")
-
-    return df_signals
-
-
-def quick_test_with_strings(long_str, short_str, meta_str):
-    """
-    Быстрый тест с конкретными строками индивидов
-
-    Параметры:
-    long_str - строковое представление лучшего Long индивида
-    short_str - строковое представление лучшего Short индивида
-    meta_str - строковое представление лучшего Meta индивида
-    """
-    print("=== QUICK TEST WITH PROVIDED STRINGS ===")
-    print(f"Long: {long_str}")
-    print(f"Short: {short_str}")
-    print(f"Meta: {meta_str}")
-
-    try:
-        # Создаем индивидов
-        best_long = gp.PrimitiveTree.from_string(long_str, pset_long)
-        best_short = gp.PrimitiveTree.from_string(short_str, pset_short)
-        best_meta = gp.PrimitiveTree.from_string(meta_str, pset_meta)
-
-        # Быстрая оценка производительности
-        long_fitness = evalLongTrading(best_long, bars)
-        short_fitness = evalShortTrading(best_short, bars)
-
-        long_func = gp.compile(best_long, pset_long)
-        short_func = gp.compile(best_short, pset_short)
-        meta_fitness = evalMetaTrading(best_meta, bars, long_func, short_func)
-
-        print(f"\nPerformance:")
-        print(f"Long: {long_fitness[0]:.2f}")
-        print(f"Short: {short_fitness[0]:.2f}")
-        print(f"Meta: {meta_fitness[0]:.2f}")
-
-        # Показываем результаты
-        plot_signals(ndf, bars, best_long, best_short, best_meta,
-                     pset_long, pset_short, pset_meta)
-
-        return best_long, best_short, best_meta
-
-    except Exception as e:
-        print(f"Ошибка: {e}")
-        return None, None, None
-
-
-# Пример использования после получения лучших индивидов:
-# После запуска main() скопируй строки лучших индивидов и используй:
-#
-# test_best_individuals()  # с предустановленными в функции
-#
-# ИЛИ
-#
-# quick_test_with_strings(
-#     "твоя_строка_long_индивида",
-#     "твоя_строка_short_индивида",
-#     "твоя_строка_meta_индивида"
-# )
+# Объединяем бары: фитнес будет суммой P&L по обоим периодам.
+# При этом в evalLongTrading/evalShortTrading при переходе от одного периода
+# к другому будет «склейка» — это не идеально, но допустимо: всего одна сделка
+# на стыке из ~1300, влияние на фитнес пренебрежимо.
+bars = bars_trend + bars_flat
+ndf = ndf_trend  # для plot_signals на тренировочных (берём первый кусок)
+print(f"  Trend bars: {len(bars_trend)}, Flat bars: {len(bars_flat)}, Total: {len(bars)}")
 
 if __name__ == '__main__':
-    # Получение данных
+    # Загрузка через BinanceBroker (для проверки)
     broker = BinanceBroker()
     data = broker.get_history_data(['BTCUSDT'], '1h', '2024-01-01', '2024-02-01')
-
     print(f"Loaded {len(data)} candles")
     print(data.head())
 
     # Создание симулятора
     simulator = TradingSimulator(initial_balance=10000, commission=0.001)
 
+    print(f"\nGP data prepared: {len(bars)} bars")
 
-    # Пример простой стратегии для тестирования
-    def simple_long_func(price, sma, ema, lwma, cur):
-        return 1 if cur > sma[-1] else -1
-
-
-    def simple_short_func(price, sma, ema, lwma, cur):
-        return 1 if cur < sma[-1] else -1
-
-
-    def simple_meta_func(long_bool, short_bool):
-        if long_bool > 0.5:
-            return 1
-        elif short_bool > 0.5:
-            return -1
-        else:
-            return 0
-
-
-    # Запуск бэктеста (требует адаптации под ваши данные)
-    print("\nExample of how to run backtest:")
-    print(
-        "signals_df, stats = backtest_strategy(data, simple_long_func, simple_short_func, simple_meta_func, simulator)")
-    print("plot_backtest_results(data, signals_df, simulator)")
-
-    print("\n=== STARTING GP EVOLUTION ===")
+    # Запуск GP-эволюции (обучение)
+    print("\n=== STARTING GP EVOLUTION ===\n")
     (pops, hofs) = main()
 
+    # ======================================================================
+    # OUT-OF-SAMPLE ВАЛИДАЦИЯ НА ДВУХ ПЕРИОДАХ С РАЗНЫМИ РЕЖИМАМИ РЫНКА
+    # ======================================================================
+
+    # Период 1: февраль 2024 — сильный восходящий тренд (~42K → ~60K, +41%)
+    print("\n\n" + "#" * 70)
+    print("# OOS ПЕРИОД 1: БЫЧИЙ РЫНОК (февраль 2024)")
+    print("#" * 70)
+    val_df_bull, val_bars_bull = validate_on_new_data(
+        hofs,
+        val_symbol="BTCUSDT",
+        val_interval="1h",
+        val_start="02-01-2024",
+        val_end="03-01-2024",
+    )
+
+    bot_metrics_bull, bh_metrics_bull = {}, {}
+    if val_bars_bull:
+        print("\n=== STRATEGY COMPARISON: BULL MARKET ===")
+        bot_metrics_bull, bh_metrics_bull, bot_eq_bull, bh_eq_bull = compare_strategies(
+            val_bars_bull, hofs, risk_percent=0.02,
+            label="BULL | Risk-managed 2%")
+        compare_strategies(val_bars_bull, hofs, risk_percent=1.0,
+                           label="BULL | Full exposure 100%")
+
+        # Рис. 3.2 курсовой — капитал портфеля на бычьем рынке
+        plot_equity_comparison(
+            bot_eq_bull, bh_eq_bull,
+            title="Капитал портфеля на бычьем рынке (февраль 2024): бот vs Buy & Hold",
+            filename="equity_bull_feb2024.png",
+        )
+
+    # Период 2: май 2023 — слабый медвежий/боковой рынок (~$29 269 → ~$27 220, ~−7%)
+    # Бот этот период НИКОГДА не видел. Независимый тест на небычьем рынке.
+    print("\n\n" + "#" * 70)
+    print("# OOS ПЕРИОД 2: СЛАБЫЙ МЕДВЕЖИЙ / БОКОВОЙ (май 2023)")
+    print("#" * 70)
+    val_df_flat, val_bars_flat = validate_on_new_data(
+        hofs,
+        val_symbol="BTCUSDT",
+        val_interval="1h",
+        val_start="05-01-2023",
+        val_end="06-01-2023",
+    )
+
+    bot_metrics_bear, bh_metrics_bear = {}, {}
+    if val_bars_flat:
+        print("\n=== STRATEGY COMPARISON: WEAK BEAR / FLAT MARKET ===")
+        bot_metrics_bear, bh_metrics_bear, bot_eq_bear, bh_eq_bear = compare_strategies(
+            val_bars_flat, hofs, risk_percent=0.02,
+            label="WEAK BEAR | Risk-managed 2%")
+        compare_strategies(val_bars_flat, hofs, risk_percent=1.0,
+                           label="WEAK BEAR | Full exposure 100%")
+
+        # Рис. 3.4 курсовой — капитал портфеля на боковом/слабом медвежьем рынке
+        plot_equity_comparison(
+            bot_eq_bear, bh_eq_bear,
+            title="Капитал портфеля на боковом/слабо медвежьем рынке (май 2023): бот vs Buy & Hold",
+            filename="equity_bear_may2023.png",
+        )
+
+    # Итоговая сводка
+    print("\n\n" + "=" * 70)
+    print("ИТОГОВАЯ СВОДКА ПО РЫНОЧНЫМ РЕЖИМАМ")
+    print("=" * 70)
+    print("Обучение: январь 2024 (тренд) + сентябрь 2023 (флэт)")
+    print("Проверка на НЕвиденных периодах:")
+    print("  • Bull market (февраль 2024) — бычий рынок, +41%")
+    print("  • Weak bear (май 2023) — слабый медвежий, −~7%")
+    print("=" * 70)
+
+    # Рис. 3.5 курсовой — сводная гистограмма
+    summary = []
+    if bot_metrics_bull and bh_metrics_bull:
+        summary.append({
+            'period': 'Февраль 2024 (бычий)',
+            'bot': bot_metrics_bull,
+            'bh': bh_metrics_bull,
+        })
+    if bot_metrics_bear and bh_metrics_bear:
+        summary.append({
+            'period': 'Май 2023 (боковой)',
+            'bot': bot_metrics_bear,
+            'bh': bh_metrics_bear,
+        })
+    if summary:
+        plot_summary_bars(summary, filename="summary_bars.png")
