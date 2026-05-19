@@ -1202,9 +1202,9 @@ def main(seed=None):
     random.seed(seed)
     print(f"Random seed: {seed}  (передай в main(seed={seed}) чтобы воспроизвести)")
 
-    POP_SIZE = 150
-    OFFSPRING = 200
-    NGEN = 30
+    POP_SIZE = 250
+    OFFSPRING = 320
+    NGEN = 300
 
     pop_long = toolbox_long.population(n=POP_SIZE)
     pop_short = toolbox_short.population(n=POP_SIZE)
@@ -1360,7 +1360,7 @@ ndf = ndf_trend  # для plot_signals на тренировочных (берё
 print(f"  Trend bars: {len(bars_trend)}, Flat bars: {len(bars_flat)}, Total: {len(bars)}")
 import multiprocessing as mp
 
-NUM_THREADS = 15   # теперь это процессы
+NUM_THREADS = 32   # теперь это процессы
 
 def _run_evolution_process(seed: int, result_queue: mp.Queue):
     """Целевая функция процесса."""
@@ -1385,7 +1385,7 @@ def _run_evolution_process(seed: int, result_queue: mp.Queue):
         result_queue.put(None)
 
 
-def run_parallel_evolution(n_processes: int = 15):  # было n_threads
+def run_parallel_evolution(n_processes: int = 32):  # было n_threads
     """
     Запускает n_processes процессов эволюции с уникальными seed-ами.
     Возвращает лучший результат по Meta fitness.
@@ -1455,7 +1455,7 @@ if __name__ == '__main__':
     # Запуск 15 параллельных эволюций
     # ----------------------------------------------------------------
     print("\n=== STARTING PARALLEL GP EVOLUTION (15 threads) ===\n")
-    best_result = run_parallel_evolution(n_processes=15)
+    best_result = run_parallel_evolution(n_processes=32)
 
     # Берём лучшие HOF-ы из победившего потока
     hofs = best_result["hofs"]
