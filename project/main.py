@@ -1527,4 +1527,4 @@ if __name__ == '__main__':
         summary.append({'period': 'Май 2023 (боковой)',
                         'bot': bot_metrics_bear, 'bh': bh_metrics_bear})
     if summary:
-        plot_summary_bars(summary, filename="summary_bars.png")
+        plot_summary_bars(summary, filename="summary_bars.png ")
