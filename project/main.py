@@ -1358,91 +1358,90 @@ ndf_flat, bars_flat = load_period("BTCUSDT", "1h", "09-01-2023", "10-01-2023")
 bars = bars_trend + bars_flat
 ndf = ndf_trend  # для plot_signals на тренировочных (берём первый кусок)
 print(f"  Trend bars: {len(bars_trend)}, Flat bars: {len(bars_flat)}, Total: {len(bars)}")
-# =====================================================================
-# MULTI-THREADED EVOLUTION  — 15 потоков, каждый со своим seed
-# =====================================================================
+import multiprocessing as mp
 
-import threading
-from typing import Dict
+NUM_THREADS = 15   # теперь это процессы
 
-NUM_THREADS = 15
-_results_lock = threading.Lock()
-_all_results = []   # [{seed, fitness, pops, hofs}, ...]
-
-
-def _run_evolution_thread(seed: int):
-    """Целевая функция потока: запускает main(seed) и сохраняет результат."""
+def _run_evolution_process(seed: int, result_queue: mp.Queue):
+    """Целевая функция процесса."""
     try:
         pops, hofs = main(seed=seed)
-        fitness = hofs[2][0].fitness.values[0]   # fitness лучшего Meta-индивида
-        with _results_lock:
-            _all_results.append({
-                "seed":    seed,
-                "fitness": fitness,
-                "pops":    pops,
-                "hofs":    hofs,
-            })
-        print(f"[seed={seed}] Thread finished. Meta fitness = {fitness:.2f}%")
+        fitness = hofs[2][0].fitness.values[0]
+        # Кладём только то что нужно — HOF нельзя сериализовать напрямую,
+        # поэтому сохраняем строки и fitness
+        result_queue.put({
+            "seed":    seed,
+            "fitness": fitness,
+            # Сохраняем строковые представления лучших индивидов
+            "best_long_str":  str(hofs[0][0]),
+            "best_short_str": str(hofs[1][0]),
+            "best_meta_str":  str(hofs[2][0]),
+            # hofs сериализуются через pickle (DEAP PrimitiveTree поддерживает)
+            "hofs": hofs,
+        })
+        print(f"[seed={seed}] Process finished. Meta fitness = {fitness:.2f}%")
     except Exception as exc:
-        print(f"[seed={seed}] Thread ERROR: {exc}")
+        print(f"[seed={seed}] Process ERROR: {exc}")
+        result_queue.put(None)
 
 
-def run_parallel_evolution(n_threads: int = NUM_THREADS):
+def run_parallel_evolution(n_processes: int = 15):  # было n_threads
     """
-    Запускает n_threads потоков эволюции с уникальными случайными seed-ами.
-    Возвращает словарь с лучшим результатом по Meta fitness.
+    Запускает n_processes процессов эволюции с уникальными seed-ами.
+    Возвращает лучший результат по Meta fitness.
     """
-    global _all_results
-    _all_results = []
-
-    # Генерируем уникальные seed-ы заранее
-    seeds = random.sample(range(1, 2**30), n_threads)
+    seeds = random.sample(range(1, 2**30), n_processes)
+    result_queue = mp.Queue()
 
     print("=" * 70)
-    print(f"ЗАПУСК {n_threads} ПАРАЛЛЕЛЬНЫХ ЭВОЛЮЦИЙ")
+    print(f"ЗАПУСК {n_processes} ПАРАЛЛЕЛЬНЫХ ПРОЦЕССОВ (multiprocessing)")
     print(f"Seeds: {seeds}")
     print("=" * 70)
 
-    threads = []
+    processes = []
     for seed in seeds:
-        t = threading.Thread(
-            target=_run_evolution_thread,
-            args=(seed,),
+        p = mp.Process(
+            target=_run_evolution_process,
+            args=(seed, result_queue),
             name=f"evo-seed-{seed}",
             daemon=False
         )
-        threads.append(t)
+        processes.append(p)
 
-    # Стартуем все потоки одновременно
-    for t in threads:
-        t.start()
+    for p in processes:
+        p.start()
 
-    # Ждём завершения всех
-    for t in threads:
-        t.join()
+    for p in processes:
+        p.join()
 
-    if not _all_results:
-        raise RuntimeError("Все потоки упали, результатов нет!")
+    # Собираем результаты
+    all_results = []
+    while not result_queue.empty():
+        r = result_queue.get()
+        if r is not None:
+            all_results.append(r)
 
-    # Выбираем лучший по Meta fitness
-    best = max(_all_results, key=lambda r: r["fitness"])
+    if not all_results:
+        raise RuntimeError("Все процессы упали, результатов нет!")
+
+    best = max(all_results, key=lambda r: r["fitness"])
 
     print("\n" + "=" * 70)
     print("ИТОГИ ПАРАЛЛЕЛЬНОЙ ЭВОЛЮЦИИ")
     print("=" * 70)
-    for r in sorted(_all_results, key=lambda x: x["fitness"], reverse=True):
+    for r in sorted(all_results, key=lambda x: x["fitness"], reverse=True):
         marker = " <-- WINNER" if r["seed"] == best["seed"] else ""
         print(f"  seed={r['seed']:12d}  Meta fitness={r['fitness']:8.2f}%{marker}")
     print("=" * 70)
-    print(f"Лучший seed: {best['seed']}, Meta fitness: {best['fitness']:.2f}%")
+
     return best
-
-
 # =====================================================================
 # ENTRY POINT
 # =====================================================================
 
 if __name__ == '__main__':
+    mp.freeze_support()
+    mp.set_start_method('spawn', force=True)
     # Загрузка через BinanceBroker (для проверки)
     broker = BinanceBroker()
     data = broker.get_history_data(['BTCUSDT'], '1h', '2024-01-01', '2024-02-01')
@@ -1456,7 +1455,7 @@ if __name__ == '__main__':
     # Запуск 15 параллельных эволюций
     # ----------------------------------------------------------------
     print("\n=== STARTING PARALLEL GP EVOLUTION (15 threads) ===\n")
-    best_result = run_parallel_evolution(n_threads=15)
+    best_result = run_parallel_evolution(n_processes=15)
 
     # Берём лучшие HOF-ы из победившего потока
     hofs = best_result["hofs"]
