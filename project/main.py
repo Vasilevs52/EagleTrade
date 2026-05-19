@@ -1358,6 +1358,89 @@ ndf_flat, bars_flat = load_period("BTCUSDT", "1h", "09-01-2023", "10-01-2023")
 bars = bars_trend + bars_flat
 ndf = ndf_trend  # для plot_signals на тренировочных (берём первый кусок)
 print(f"  Trend bars: {len(bars_trend)}, Flat bars: {len(bars_flat)}, Total: {len(bars)}")
+# =====================================================================
+# MULTI-THREADED EVOLUTION  — 15 потоков, каждый со своим seed
+# =====================================================================
+
+import threading
+from typing import Dict
+
+NUM_THREADS = 15
+_results_lock = threading.Lock()
+_all_results = []   # [{seed, fitness, pops, hofs}, ...]
+
+
+def _run_evolution_thread(seed: int):
+    """Целевая функция потока: запускает main(seed) и сохраняет результат."""
+    try:
+        pops, hofs = main(seed=seed)
+        fitness = hofs[2][0].fitness.values[0]   # fitness лучшего Meta-индивида
+        with _results_lock:
+            _all_results.append({
+                "seed":    seed,
+                "fitness": fitness,
+                "pops":    pops,
+                "hofs":    hofs,
+            })
+        print(f"[seed={seed}] Thread finished. Meta fitness = {fitness:.2f}%")
+    except Exception as exc:
+        print(f"[seed={seed}] Thread ERROR: {exc}")
+
+
+def run_parallel_evolution(n_threads: int = NUM_THREADS):
+    """
+    Запускает n_threads потоков эволюции с уникальными случайными seed-ами.
+    Возвращает словарь с лучшим результатом по Meta fitness.
+    """
+    global _all_results
+    _all_results = []
+
+    # Генерируем уникальные seed-ы заранее
+    seeds = random.sample(range(1, 2**30), n_threads)
+
+    print("=" * 70)
+    print(f"ЗАПУСК {n_threads} ПАРАЛЛЕЛЬНЫХ ЭВОЛЮЦИЙ")
+    print(f"Seeds: {seeds}")
+    print("=" * 70)
+
+    threads = []
+    for seed in seeds:
+        t = threading.Thread(
+            target=_run_evolution_thread,
+            args=(seed,),
+            name=f"evo-seed-{seed}",
+            daemon=False
+        )
+        threads.append(t)
+
+    # Стартуем все потоки одновременно
+    for t in threads:
+        t.start()
+
+    # Ждём завершения всех
+    for t in threads:
+        t.join()
+
+    if not _all_results:
+        raise RuntimeError("Все потоки упали, результатов нет!")
+
+    # Выбираем лучший по Meta fitness
+    best = max(_all_results, key=lambda r: r["fitness"])
+
+    print("\n" + "=" * 70)
+    print("ИТОГИ ПАРАЛЛЕЛЬНОЙ ЭВОЛЮЦИИ")
+    print("=" * 70)
+    for r in sorted(_all_results, key=lambda x: x["fitness"], reverse=True):
+        marker = " <-- WINNER" if r["seed"] == best["seed"] else ""
+        print(f"  seed={r['seed']:12d}  Meta fitness={r['fitness']:8.2f}%{marker}")
+    print("=" * 70)
+    print(f"Лучший seed: {best['seed']}, Meta fitness: {best['fitness']:.2f}%")
+    return best
+
+
+# =====================================================================
+# ENTRY POINT
+# =====================================================================
 
 if __name__ == '__main__':
     # Загрузка через BinanceBroker (для проверки)
@@ -1366,70 +1449,69 @@ if __name__ == '__main__':
     print(f"Loaded {len(data)} candles")
     print(data.head())
 
-    # Создание симулятора
     simulator = TradingSimulator(initial_balance=10000, commission=0.001)
-
     print(f"\nGP data prepared: {len(bars)} bars")
 
-    # Запуск GP-эволюции (обучение)
-    print("\n=== STARTING GP EVOLUTION ===\n")
-    (pops, hofs) = main()
+    # ----------------------------------------------------------------
+    # Запуск 15 параллельных эволюций
+    # ----------------------------------------------------------------
+    print("\n=== STARTING PARALLEL GP EVOLUTION (15 threads) ===\n")
+    best_result = run_parallel_evolution(n_threads=15)
+
+    # Берём лучшие HOF-ы из победившего потока
+    hofs = best_result["hofs"]
+    hof_long, hof_short, hof_meta = hofs
+
+    print(f"\nBest Long fitness:  {hof_long[0].fitness.values[0]:.2f}%")
+    print(f"Best Long:  {str(hof_long[0])}")
+    print(f"\nBest Short fitness: {hof_short[0].fitness.values[0]:.2f}%")
+    print(f"Best Short: {str(hof_short[0])}")
+    print(f"\nBest Meta fitness:  {hof_meta[0].fitness.values[0]:.2f}%")
+    print(f"Best Meta:  {str(hof_meta[0])}")
+
+    # Визуализация лучшего результата
+    plot_signals(ndf, bars, hof_long[0], hof_short[0], hof_meta[0],
+                 pset_long, pset_short, pset_meta,
+                 title_prefix=f"[BEST seed={best_result['seed']}] ")
 
     # ======================================================================
-    # OUT-OF-SAMPLE ВАЛИДАЦИЯ НА ДВУХ ПЕРИОДАХ С РАЗНЫМИ РЕЖИМАМИ РЫНКА
+    # OUT-OF-SAMPLE ВАЛИДАЦИЯ
     # ======================================================================
 
-    # Период 1: февраль 2024 — сильный восходящий тренд (~42K → ~60K, +41%)
     print("\n\n" + "#" * 70)
     print("# OOS ПЕРИОД 1: БЫЧИЙ РЫНОК (февраль 2024)")
     print("#" * 70)
     val_df_bull, val_bars_bull = validate_on_new_data(
-        hofs,
-        val_symbol="BTCUSDT",
-        val_interval="1h",
-        val_start="02-01-2024",
-        val_end="03-01-2024",
+        hofs, val_symbol="BTCUSDT", val_interval="1h",
+        val_start="02-01-2024", val_end="03-01-2024",
     )
 
     bot_metrics_bull, bh_metrics_bull = {}, {}
     if val_bars_bull:
-        print("\n=== STRATEGY COMPARISON: BULL MARKET ===")
         bot_metrics_bull, bh_metrics_bull, bot_eq_bull, bh_eq_bull = compare_strategies(
-            val_bars_bull, hofs, risk_percent=0.02,
-            label="BULL | Risk-managed 2%")
+            val_bars_bull, hofs, risk_percent=0.02, label="BULL | Risk-managed 2%")
         compare_strategies(val_bars_bull, hofs, risk_percent=1.0,
                            label="BULL | Full exposure 100%")
-
-        # Рис. 3.2 курсовой — капитал портфеля на бычьем рынке
         plot_equity_comparison(
             bot_eq_bull, bh_eq_bull,
             title="Капитал портфеля на бычьем рынке (февраль 2024): бот vs Buy & Hold",
             filename="equity_bull_feb2024.png",
         )
 
-    # Период 2: май 2023 — слабый медвежий/боковой рынок (~$29 269 → ~$27 220, ~−7%)
-    # Бот этот период НИКОГДА не видел. Независимый тест на небычьем рынке.
     print("\n\n" + "#" * 70)
     print("# OOS ПЕРИОД 2: СЛАБЫЙ МЕДВЕЖИЙ / БОКОВОЙ (май 2023)")
     print("#" * 70)
     val_df_flat, val_bars_flat = validate_on_new_data(
-        hofs,
-        val_symbol="BTCUSDT",
-        val_interval="1h",
-        val_start="05-01-2023",
-        val_end="06-01-2023",
+        hofs, val_symbol="BTCUSDT", val_interval="1h",
+        val_start="05-01-2023", val_end="06-01-2023",
     )
 
     bot_metrics_bear, bh_metrics_bear = {}, {}
     if val_bars_flat:
-        print("\n=== STRATEGY COMPARISON: WEAK BEAR / FLAT MARKET ===")
         bot_metrics_bear, bh_metrics_bear, bot_eq_bear, bh_eq_bear = compare_strategies(
-            val_bars_flat, hofs, risk_percent=0.02,
-            label="WEAK BEAR | Risk-managed 2%")
+            val_bars_flat, hofs, risk_percent=0.02, label="WEAK BEAR | Risk-managed 2%")
         compare_strategies(val_bars_flat, hofs, risk_percent=1.0,
                            label="WEAK BEAR | Full exposure 100%")
-
-        # Рис. 3.4 курсовой — капитал портфеля на боковом/слабом медвежьем рынке
         plot_equity_comparison(
             bot_eq_bear, bh_eq_bear,
             title="Капитал портфеля на боковом/слабо медвежьем рынке (май 2023): бот vs Buy & Hold",
@@ -1437,28 +1519,12 @@ if __name__ == '__main__':
         )
 
     # Итоговая сводка
-    print("\n\n" + "=" * 70)
-    print("ИТОГОВАЯ СВОДКА ПО РЫНОЧНЫМ РЕЖИМАМ")
-    print("=" * 70)
-    print("Обучение: январь 2024 (тренд) + сентябрь 2023 (флэт)")
-    print("Проверка на НЕвиденных периодах:")
-    print("  • Bull market (февраль 2024) — бычий рынок, +41%")
-    print("  • Weak bear (май 2023) — слабый медвежий, −~7%")
-    print("=" * 70)
-
-    # Рис. 3.5 курсовой — сводная гистограмма
     summary = []
     if bot_metrics_bull and bh_metrics_bull:
-        summary.append({
-            'period': 'Февраль 2024 (бычий)',
-            'bot': bot_metrics_bull,
-            'bh': bh_metrics_bull,
-        })
+        summary.append({'period': 'Февраль 2024 (бычий)',
+                        'bot': bot_metrics_bull, 'bh': bh_metrics_bull})
     if bot_metrics_bear and bh_metrics_bear:
-        summary.append({
-            'period': 'Май 2023 (боковой)',
-            'bot': bot_metrics_bear,
-            'bh': bh_metrics_bear,
-        })
+        summary.append({'period': 'Май 2023 (боковой)',
+                        'bot': bot_metrics_bear, 'bh': bh_metrics_bear})
     if summary:
         plot_summary_bars(summary, filename="summary_bars.png")
