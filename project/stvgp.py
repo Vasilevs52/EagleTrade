@@ -17,10 +17,18 @@ from signals import evalLongTrading, evalShortTrading, evalMetaTrading, plot_sig
 # DEAP TOOLBOX
 # =====================================================================
 
-creator.create("FitnessMax", base.Fitness, weights=(1.0,))
-creator.create("LongIndividual", gp.PrimitiveTree, fitness=creator.FitnessMax)
-creator.create("ShortIndividual", gp.PrimitiveTree, fitness=creator.FitnessMax)
-creator.create("MetaIndividual", gp.PrimitiveTree, fitness=creator.FitnessMax)
+# creator.create регистрирует классы ГЛОБАЛЬНО в модуле deap.creator.
+# Повторный вызов (повторный импорт в дочернем процессе, переиспользование
+# в одном процессе) кидает RuntimeWarning/ошибку. Создаём идемпотентно —
+# только если класс ещё не зарегистрирован.
+def _safe_create(name, *args, **kwargs):
+    if not hasattr(creator, name):
+        creator.create(name, *args, **kwargs)
+
+_safe_create("FitnessMax", base.Fitness, weights=(1.0,))
+_safe_create("LongIndividual", gp.PrimitiveTree, fitness=creator.FitnessMax)
+_safe_create("ShortIndividual", gp.PrimitiveTree, fitness=creator.FitnessMax)
+_safe_create("MetaIndividual", gp.PrimitiveTree, fitness=creator.FitnessMax)
 
 toolbox_long = base.Toolbox()
 toolbox_long.register("expr", gp.genHalfAndHalf, pset=pset_long, min_=1, max_=4)

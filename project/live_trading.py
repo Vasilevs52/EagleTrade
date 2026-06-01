@@ -64,10 +64,16 @@ def make_testnet_client(api_key=None, api_secret=None):
 # ДАННЫЕ И ИНДИКАТОРЫ (как в build_input_vectors, но для последнего бара)
 # ---------------------------------------------------------------------
 
-def get_recent_klines(client, symbol=None, interval=None, limit=120):
+def get_recent_klines(client, symbol=None, interval=None, limit=120,
+                      drop_unclosed=True):
     """
     Тянет свежие свечи с фьючерсного эндпоинта и возвращает DataFrame
     со столбцом Price (= цена закрытия).
+
+    drop_unclosed=True — отбрасывает ПОСЛЕДНЮЮ свечу, если она ещё не
+    закрылась (Binance отдаёт текущую формирующуюся свечу последней).
+    Без этого сигнал считается по «цене», которая ещё меняется —
+    look-ahead/дёрганье в реальной торговле.
     """
     symbol = symbol or CFG.symbol
     interval = interval or CFG.interval
@@ -77,6 +83,14 @@ def get_recent_klines(client, symbol=None, interval=None, limit=120):
     df = pd.DataFrame(raw, columns=cols)
     df["Price"] = df["Close"].astype(float)
     df["Open Time"] = pd.to_datetime(df["Open Time"], unit="ms")
+    df["Close Time"] = pd.to_datetime(df["Close Time"], unit="ms")
+
+    if drop_unclosed and len(df) > 0:
+        # Свеча закрыта, если её Close Time уже в прошлом.
+        now = pd.Timestamp.utcnow().tz_localize(None)
+        if df["Close Time"].iloc[-1] > now:
+            df = df.iloc[:-1]
+
     return df[["Open Time", "Price"]]
 
 
@@ -96,7 +110,9 @@ def build_last_input(df: pd.DataFrame, window: int = None):
     lwma = price.rolling(window).apply(
         lambda x: np.dot(x, weights) / weights.sum(), raw=True)
 
-    i = len(df) - 1            # последний бар
+    # df уже без незакрытой свечи (см. get_recent_klines), поэтому
+    # последний бар — это последний ЗАКРЫТЫЙ бар.
+    i = len(df) - 1
     start = i - window
     return {
         "price": price.iloc[start:i].tolist(),

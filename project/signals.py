@@ -71,7 +71,9 @@ class TradingSimulator:
 
         if action == 'LONG':
             if self.position_type == 'SHORT':
-                pnl = self.position * (self.position_price - price)
+                # position отрицательна для шорта -> берём abs, как в ветке CLOSE.
+                # Профит шорта = объём * (цена входа - цена выхода).
+                pnl = abs(self.position) * (self.position_price - price)
                 self.balance += pnl
                 self.balance -= abs(self.position * price * self.commission)
 
