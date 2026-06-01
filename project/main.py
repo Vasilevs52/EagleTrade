@@ -248,6 +248,75 @@ def run_from_file():
     analyze_and_visualize(hofs, title_prefix=f"[FILE #{idx} seed={record.get('seed')}] ")
 
 
+def run_live_testnet():
+    """Режим 3: торговля на ТЕСТОВОМ балансе (Binance Futures Testnet)
+    по сохранённой стратегии из файла."""
+    from live_trading import run_live_trading
+
+    records = load_records(RESULTS_FILE)
+    if not records:
+        print(f"\nФайл {RESULTS_FILE} пуст — сначала обучите стратегию (вариант 1).")
+        return
+
+    print_saved_summary(RESULTS_FILE, top=20)
+    raw = input(f"\n№ стратегии для торговли [0..{len(records)-1}] (Enter = 0): ").strip()
+    try:
+        idx = int(raw) if raw else 0
+    except ValueError:
+        idx = 0
+    idx = max(0, min(idx, len(records) - 1))
+    record = records[idx]
+    hofs = record_to_hofs(record)
+
+    print(f"\nТорговля стратегией #{idx}: seed={record.get('seed')}, "
+          f"meta fitness={record.get('fitness')}")
+
+    # Параметры торговли (можно поменять)
+    interval = input("Таймфрейм [1h] (Enter = 1h): ").strip() or "1h"
+    poll_raw = input("Опрос, секунд [60] (Enter = 60): ").strip()
+    poll = int(poll_raw) if poll_raw.isdigit() else 60
+
+    run_live_trading(
+        hofs,
+        symbol="BTCUSDT",
+        interval=interval,
+        window=50,
+        risk_percent=0.02,
+        leverage=1,
+        poll_seconds=poll,
+        max_iterations=None,   # бесконечно, до Ctrl+C
+    )
+
+
+def run_paper_trading():
+    """Режим 4: быстрая симуляция стратегии по истории на живых ценах
+    Binance — БЕЗ API-ключей, по виртуальному балансу."""
+    from live_trading import paper_trade_history
+
+    records = load_records(RESULTS_FILE)
+    if not records:
+        print(f"\nФайл {RESULTS_FILE} пуст — сначала обучите стратегию (вариант 1).")
+        return
+
+    print_saved_summary(RESULTS_FILE, top=20)
+    raw = input(f"\n№ стратегии [0..{len(records)-1}] (Enter = 0): ").strip()
+    try:
+        idx = int(raw) if raw else 0
+    except ValueError:
+        idx = 0
+    idx = max(0, min(idx, len(records) - 1))
+    hofs = record_to_hofs(records[idx])
+
+    interval = input("Таймфрейм [1h] (Enter = 1h): ").strip() or "1h"
+    lim_raw = input("Сколько свечей истории [500] (Enter = 500): ").strip()
+    limit = int(lim_raw) if lim_raw.isdigit() else 500
+
+    paper_trade_history(
+        hofs, symbol="BTCUSDT", interval=interval,
+        window=50, limit=limit, initial_balance=5000.0, risk_percent=0.02,
+    )
+
+
 # =====================================================================
 # ENTRY POINT
 # =====================================================================
@@ -272,11 +341,17 @@ if __name__ == '__main__':
     print("\n" + "=" * 70)
     print("EAGLETRADE — выберите режим работы:")
     print("  1 — Запустить новую эволюцию (обучение, результат сохранится в файл)")
-    print(f"  2 — Загрузить готовую стратегию из файла ({RESULTS_FILE})")
+    print(f"  2 — Загрузить готовую стратегию из файла ({RESULTS_FILE}) и показать графики")
+    print("  3 — Торговля на ТЕСТОВОМ балансе (Binance Futures Testnet, нужны ключи)")
+    print("  4 — Paper-trading: симуляция на живых ценах БЕЗ ключей (виртуальный баланс)")
     print("=" * 70)
-    choice = input("Ваш выбор [1/2] (Enter = 1): ").strip()
+    choice = input("Ваш выбор [1/2/3/4] (Enter = 1): ").strip()
 
     if choice == "2":
         run_from_file()
+    elif choice == "3":
+        run_live_testnet()
+    elif choice == "4":
+        run_paper_trading()
     else:
         run_new_evolution()
