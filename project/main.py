@@ -171,12 +171,15 @@ def analyze_and_visualize(hofs, title_prefix="[BEST] "):
     )
 
     bot_metrics_bull, bh_metrics_bull = {}, {}
+    bot_full_bull = {}
     if val_bars_bull:
         bot_metrics_bull, bh_metrics_bull, bot_eq_bull, bh_eq_bull = compare_strategies(
             val_bars_bull, hofs, risk_percent=CFG.risk_percent,
             label=f"BULL | Risk-managed {CFG.risk_percent:.0%}")
-        compare_strategies(val_bars_bull, hofs, risk_percent=1.0,
-                           label="BULL | Full exposure 100%")
+        # Метрики при полной экспозиции (100%) — для честного сравнения с B&H
+        bot_full_bull, _, _, _ = compare_strategies(
+            val_bars_bull, hofs, risk_percent=1.0,
+            label="BULL | Full exposure 100%")
         plot_equity_comparison(
             bot_eq_bull, bh_eq_bull,
             title="Капитал портфеля на бычьем рынке (февраль 2024): бот vs Buy & Hold",
@@ -193,26 +196,31 @@ def analyze_and_visualize(hofs, title_prefix="[BEST] "):
     )
 
     bot_metrics_bear, bh_metrics_bear = {}, {}
+    bot_full_bear = {}
     if val_bars_flat:
         bot_metrics_bear, bh_metrics_bear, bot_eq_bear, bh_eq_bear = compare_strategies(
             val_bars_flat, hofs, risk_percent=CFG.risk_percent,
             label=f"WEAK BEAR | Risk-managed {CFG.risk_percent:.0%}")
-        compare_strategies(val_bars_flat, hofs, risk_percent=1.0,
-                           label="WEAK BEAR | Full exposure 100%")
+        # Метрики при полной экспозиции (100%) — для честного сравнения с B&H
+        bot_full_bear, _, _, _ = compare_strategies(
+            val_bars_flat, hofs, risk_percent=1.0,
+            label="WEAK BEAR | Full exposure 100%")
         plot_equity_comparison(
             bot_eq_bear, bh_eq_bear,
             title="Капитал портфеля на боковом/слабо медвежьем рынке (май 2023): бот vs Buy & Hold",
             filename="equity_bear_may2023.png",
         )
 
-    # Итоговая сводка
+    # Итоговая сводка: для каждого периода — бот 2%, бот 100%, buy & hold
     summary = []
     if bot_metrics_bull and bh_metrics_bull:
         summary.append({'period': 'Февраль 2024 (бычий)',
-                        'bot': bot_metrics_bull, 'bh': bh_metrics_bull})
+                        'bot': bot_metrics_bull, 'bot_full': bot_full_bull,
+                        'bh': bh_metrics_bull})
     if bot_metrics_bear and bh_metrics_bear:
         summary.append({'period': 'Май 2023 (боковой)',
-                        'bot': bot_metrics_bear, 'bh': bh_metrics_bear})
+                        'bot': bot_metrics_bear, 'bot_full': bot_full_bear,
+                        'bh': bh_metrics_bear})
     if summary:
         plot_summary_bars(summary, filename="summary_bars.png")
 

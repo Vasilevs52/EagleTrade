@@ -783,63 +783,84 @@ def plot_equity_comparison(bot_equity, bh_equity, title, filename,
 
 def plot_summary_bars(results, filename="summary_bars.png"):
     """
-    Сводная гистограмма доходности и максимальной просадки
-    по двум отложенным периодам для бота и Buy & Hold.
+    Сводная гистограмма доходности и максимальной просадки по периодам.
+
+    Для каждого периода показывает ТРИ столбца:
+      • бот при риск-менеджменте (risk_percent из CFG, напр. 2%)
+      • бот при полной экспозиции (100%) — честное сравнение с B&H
+      • Buy & Hold (всегда 100% капитала)
 
     results — список словарей вида:
-      {'period': 'Февраль 2024 (бычий)',
-       'bot':  {'Total Return (%)': ..., 'Max Drawdown (%)': ...},
-       'bh':   {'Total Return (%)': ..., 'Max Drawdown (%)': ...}}
+      {'period': '...',
+       'bot':      {'Total Return (%)':.., 'Max Drawdown (%)':..},  # risk-managed
+       'bot_full': {'Total Return (%)':.., 'Max Drawdown (%)':..},  # 100% (опц.)
+       'bh':       {'Total Return (%)':.., 'Max Drawdown (%)':..}}
     """
     if not results:
         print("plot_summary_bars: пустой список результатов")
         return
 
     periods = [r['period'] for r in results]
-    bot_ret = [r['bot'].get('Total Return (%)', 0.0) for r in results]
-    bh_ret = [r['bh'].get('Total Return (%)', 0.0) for r in results]
-    bot_dd = [r['bot'].get('Max Drawdown (%)', 0.0) for r in results]
-    bh_dd = [r['bh'].get('Max Drawdown (%)', 0.0) for r in results]
+    has_full = any(r.get('bot_full') for r in results)
+
+    def col(group, metric):
+        return [r.get(group, {}).get(metric, 0.0) for r in results]
+
+    bot_ret, bot_dd = col('bot', 'Total Return (%)'), col('bot', 'Max Drawdown (%)')
+    bh_ret, bh_dd = col('bh', 'Total Return (%)'), col('bh', 'Max Drawdown (%)')
+    if has_full:
+        full_ret, full_dd = col('bot_full', 'Total Return (%)'), col('bot_full', 'Max Drawdown (%)')
 
     x = np.arange(len(periods))
-    width = 0.35
+    # 3 столбца если есть bot_full, иначе 2
+    width = 0.26 if has_full else 0.35
 
-    fig, (ax_ret, ax_dd) = plt.subplots(1, 2, figsize=(13, 5))
+    fig, (ax_ret, ax_dd) = plt.subplots(1, 2, figsize=(14, 5))
 
-    bars1 = ax_ret.bar(x - width / 2, bot_ret, width,
-                       label='EagleTrade (бот)', color='#1f77b4')
-    bars2 = ax_ret.bar(x + width / 2, bh_ret, width,
-                       label='Buy & Hold', color='#d62728')
-    ax_ret.axhline(y=0, color='black', linewidth=0.6)
-    ax_ret.set_title('Доходность за период')
-    ax_ret.set_ylabel('Доходность, %')
-    ax_ret.set_xticks(x)
-    ax_ret.set_xticklabels(periods)
-    ax_ret.legend()
-    ax_ret.grid(True, alpha=0.3, axis='y')
-    for b in list(bars1) + list(bars2):
-        h = b.get_height()
-        offset = 0.4 if h >= 0 else -1.2
-        ax_ret.text(b.get_x() + b.get_width() / 2, h + offset,
-                    f'{h:.2f}%', ha='center', fontsize=9)
+    def draw(ax, vals_groups, title, ylabel):
+        """vals_groups: список (offset, values, label, color)."""
+        rects = []
+        for off, vals, lab, color in vals_groups:
+            rects += list(ax.bar(x + off, vals, width, label=lab, color=color))
+        ax.axhline(y=0, color='black', linewidth=0.6)
+        ax.set_title(title)
+        ax.set_ylabel(ylabel)
+        ax.set_xticks(x)
+        ax.set_xticklabels(periods)
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.3, axis='y')
+        for b in rects:
+            h = b.get_height()
+            offset = 0.4 if h >= 0 else -1.2
+            ax.text(b.get_x() + b.get_width() / 2, h + offset,
+                    f'{h:.1f}%', ha='center', fontsize=7)
 
-    bars3 = ax_dd.bar(x - width / 2, bot_dd, width,
-                      label='EagleTrade (бот)', color='#1f77b4')
-    bars4 = ax_dd.bar(x + width / 2, bh_dd, width,
-                      label='Buy & Hold', color='#d62728')
-    ax_dd.set_title('Максимальная просадка')
-    ax_dd.set_ylabel('Просадка, %')
-    ax_dd.set_xticks(x)
-    ax_dd.set_xticklabels(periods)
-    ax_dd.legend()
-    ax_dd.grid(True, alpha=0.3, axis='y')
-    for b in list(bars3) + list(bars4):
-        h = b.get_height()
-        ax_dd.text(b.get_x() + b.get_width() / 2, h + 0.1,
-                   f'{h:.2f}%', ha='center', fontsize=9)
+    risk_label = f'Бот (риск {CFG.risk_percent:.0%})'
+    if has_full:
+        ret_groups = [
+            (-width, bot_ret,  risk_label,          '#1f77b4'),
+            (0.0,    full_ret, 'Бот (100%)',        '#2ca02c'),
+            (+width, bh_ret,   'Buy & Hold',        '#d62728'),
+        ]
+        dd_groups = [
+            (-width, bot_dd,  risk_label,    '#1f77b4'),
+            (0.0,    full_dd, 'Бот (100%)',  '#2ca02c'),
+            (+width, bh_dd,   'Buy & Hold',  '#d62728'),
+        ]
+    else:
+        ret_groups = [
+            (-width / 2, bot_ret, risk_label,   '#1f77b4'),
+            (+width / 2, bh_ret,  'Buy & Hold', '#d62728'),
+        ]
+        dd_groups = [
+            (-width / 2, bot_dd, risk_label,   '#1f77b4'),
+            (+width / 2, bh_dd,  'Buy & Hold', '#d62728'),
+        ]
 
-    plt.suptitle('Сводное сравнение EagleTrade и Buy & Hold по двум периодам',
-                 fontsize=13)
+    draw(ax_ret, ret_groups, 'Доходность за период', 'Доходность, %')
+    draw(ax_dd, dd_groups, 'Максимальная просадка', 'Просадка, %')
+
+    plt.suptitle('Сводное сравнение EagleTrade и Buy & Hold', fontsize=13)
     plt.tight_layout()
     plt.savefig(filename, dpi=150, bbox_inches='tight')
     print(f"  → сохранён график: {filename}")
