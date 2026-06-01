@@ -13,6 +13,7 @@ from primitives import pset_long, pset_short, pset_meta
 from signals import (
     TradingSimulator,
     compare_strategies,
+    quick_profit_summary,
     plot_signals,
     plot_equity_comparison,
     plot_summary_bars,
@@ -249,10 +250,14 @@ def run_from_file():
     idx = max(0, min(idx, len(records) - 1))
 
     record = records[idx]
+    hofs = record_to_hofs(record)
+
+    # ПЕРВЫМ ДЕЛОМ — прибыль на тренировочном участке и разница с buy & hold
+    quick_profit_summary(bars, hofs, label="TRAIN")
+
     print(f"\nЗагружена стратегия #{idx}: seed={record.get('seed')}, "
           f"meta fitness={record.get('fitness')}")
 
-    hofs = record_to_hofs(record)
     analyze_and_visualize(hofs, title_prefix=f"[FILE #{idx} seed={record.get('seed')}] ")
 
 

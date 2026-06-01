@@ -669,6 +669,61 @@ def compare_strategies(bars: list, hofs, initial_balance: float = CFG.initial_ba
     return bot_metrics, bh_metrics, list(sim.equity_curve), bh_equity
 
 
+def quick_profit_summary(bars, hofs, initial_balance=None, risk_percent=None,
+                         label="TRAIN"):
+    """
+    Быстрая сводка БЕЗ большой таблицы и графиков:
+    прибыль стратегии, прибыль buy & hold и разница между ними.
+    Возвращает (bot_return_pct, bh_return_pct). Печатает компактный блок.
+    """
+    initial_balance = initial_balance if initial_balance is not None else CFG.initial_balance
+    risk_percent = risk_percent if risk_percent is not None else CFG.risk_percent
+
+    if not bars:
+        print("quick_profit_summary: нет данных.")
+        return None, None
+
+    hof_long, hof_short, hof_meta = hofs
+    long_func = gp.compile(hof_long[0], pset_long)
+    short_func = gp.compile(hof_short[0], pset_short)
+    meta_func = gp.compile(hof_meta[0], pset_meta)
+
+    # --- Бот ---
+    sim = TradingSimulator(initial_balance=initial_balance,
+                           commission=CFG.commission, risk_percent=risk_percent)
+    for b in bars:
+        desired, _, _, _ = decide_position(b, long_func, short_func, meta_func)
+        if desired == 1:
+            action = 'LONG'
+        elif desired == -1:
+            action = 'SHORT'
+        else:
+            action = 'CLOSE' if sim.position_type != 'FLAT' else 'HOLD'
+        sim.execute_trade(timestamp=None, action=action, price=b["cur"])
+    sim.close_position(timestamp=None, price=bars[-1]["cur"])
+
+    bot_return = (sim.balance / initial_balance - 1) * 100
+
+    # --- Buy & Hold ---
+    bh_metrics = buy_and_hold_benchmark(bars, initial_balance=initial_balance)
+    bh_return = bh_metrics.get('Total Return (%)', 0.0)
+
+    diff = bot_return - bh_return
+    sign = "+" if diff >= 0 else ""
+
+    print("\n" + "=" * 60)
+    print(f"ПРИБЫЛЬ НА УЧАСТКЕ [{label}]  ({len(bars)} баров, "
+          f"риск {risk_percent:.0%})")
+    print("=" * 60)
+    print(f"  Стратегия (бот):   {bot_return:+8.2f}%")
+    print(f"  Buy & Hold:        {bh_return:+8.2f}%")
+    print(f"  Разница:           {sign}{diff:7.2f} п.п.  "
+          f"({'лучше' if diff >= 0 else 'хуже'} buy & hold)")
+    print("=" * 60)
+
+    return bot_return, bh_return
+
+
 # =====================================================================
 # PLOT — equity curve бот vs Buy & Hold
 # =====================================================================
