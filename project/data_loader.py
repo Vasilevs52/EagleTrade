@@ -60,7 +60,14 @@ def add_indicators(df: pd.DataFrame, window: int = None):
 def build_input_vectors(df: pd.DataFrame, min_window: int = None):
     min_window = min_window if min_window is not None else CFG.window
     bars = []
-    for i in range(min_window, len(df) - 1):
+    # ВАЖНО: окно индикаторов — это срез iloc[i-min_window : i]. SMA/LWMA
+    # не определены (NaN) на первых (min_window-1) барах из-за rolling().
+    # Чтобы в ОКНО не попадали NaN, начинаем не с min_window, а с
+    # (2*min_window - 1): тогда самый ранний индекс окна = min_window-1,
+    # где индикаторы уже посчитаны. Иначе деревья получают NaN на входе и
+    # сигналы молча «съедаются» (NaN > 0 == False), искажая фитнес.
+    first_i = 2 * min_window - 1
+    for i in range(first_i, len(df) - 1):
         start = i - min_window
         bars.append({
             "price": df["Price"].iloc[start:i].tolist(),

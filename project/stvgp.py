@@ -112,7 +112,7 @@ def evolve_one_gen(pop, toolbox, hof, mu=100, lambda_=150, cxpb=0.6, mutpb=0.3):
     return pop
 
 
-def evolve(bars, ndf, seed=None, pop_size=25, offspring=32, ngen=10,
+def evolve(bars, ndf, seed=None, pop_size=250, offspring=320, ngen=25,
            do_plot=True):
     """
     Коэволюция трёх популяций на наборе баров `bars`.
@@ -149,6 +149,7 @@ def evolve(bars, ndf, seed=None, pop_size=25, offspring=32, ngen=10,
     print("Signal logic: true = position open, false = position closed")
     print("=" * 60)
 
+    prev_target = None  # (str(best_long), str(best_short)) предыдущего поколения
     for gen in range(ngen):
         print(f"\n--- Generation {gen + 1}/{ngen} ---")
 
@@ -166,11 +167,23 @@ def evolve(bars, ndf, seed=None, pop_size=25, offspring=32, ngen=10,
                               best_long_func=best_long_func,
                               best_short_func=best_short_func)
 
-        if gen == 0:
+        # Meta оценивается ПРОТИВ текущих лучших long/short. Когда они
+        # меняются, фитнес ранее оценённых meta-особей устаревает: selBest
+        # начинает сравнивать несопоставимые числа (мишень «уплыла»).
+        # Поэтому при смене мишени инвалидируем ВЕСЬ pop_meta (пересчёт
+        # против новой мишени) и пересоздаём hof_meta (старые записи мерились
+        # против устаревшей мишени).
+        cur_target = (str(hof_long[0]), str(hof_short[0]))
+        if gen == 0 or cur_target != prev_target:
+            for ind in pop_meta:
+                if ind.fitness.valid:
+                    del ind.fitness.values
+            hof_meta = tools.HallOfFame(5)
             fitnesses = list(map(toolbox_meta.evaluate, pop_meta))
             for ind, fit in zip(pop_meta, fitnesses):
                 ind.fitness.values = fit
             hof_meta.update(pop_meta)
+        prev_target = cur_target
 
         pop_meta = evolve_one_gen(pop_meta, toolbox_meta, hof_meta,
                                   mu=pop_size, lambda_=offspring)

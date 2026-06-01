@@ -100,7 +100,9 @@ def build_last_input(df: pd.DataFrame, window: int = None):
     в том же формате, что build_input_vectors (price/sma/ema/lwma/cur).
     """
     window = window if window is not None else CFG.window
-    if len(df) < window + 1:
+    # Нужно минимум 2*window баров: окно iloc[i-window:i] не должно
+    # содержать NaN от rolling() (см. подробности в build_input_vectors).
+    if len(df) < 2 * window:
         return None
 
     price = df["Price"]
@@ -357,7 +359,9 @@ def run_live_trading(hofs, symbol=None, interval=None, window=None,
     try:
         while True:
             iteration += 1
-            df = get_recent_klines(client, symbol, interval, limit=window + 70)
+            # Тянем с запасом: нужно >= 2*window закрытых баров (без NaN
+            # в окне индикаторов) + буфер на отброшенную незакрытую свечу.
+            df = get_recent_klines(client, symbol, interval, limit=2 * window + 10)
             bar_time = df["Open Time"].iloc[-1]
 
             # Действуем только на новом баре (избегаем дёрганья внутри свечи)
