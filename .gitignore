@@ -1,0 +1,19 @@
+/.idea
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Артефакты запусков EagleTrade
+project/run_out.txt
+project/results/
+project/evolution_results.json
+
+# Сгенерированные графики (создаются кодом при каждом прогоне)
+project/backtest_result.png
+project/equity_bull_feb2024.png
+project/equity_bear_may2023.png
+project/summary_bars.png
