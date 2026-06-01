@@ -168,6 +168,44 @@ class TradingSimulator:
 
 
 # =====================================================================
+# ТОРГОВЫЕ КОНСТАНТЫ И ОБЩАЯ РЕШАЮЩАЯ ЛОГИКА
+# Единый источник правды для комиссий, порогов и решения мета-сигнала.
+# Раньше эти значения и правило meta>0.5/<-0.5 были скопированы в 4 местах
+# (evalMetaTrading, plot_signals, compare_strategies, live_trading) и могли
+# разъехаться. Теперь — одно место.
+# =====================================================================
+
+COMMISSION = 0.001          # 0.1% за сделку (вход + выход = 0.2%)
+SHORT_COST_PER_BAR = 0.001  # 0.001% за бар удержания шорта (funding rate)
+LONG_THRESHOLD = 0.5        # meta_sig > LONG_THRESHOLD  -> LONG
+SHORT_THRESHOLD = -0.5      # meta_sig < SHORT_THRESHOLD -> SHORT
+
+
+def decide_position(bar, long_func, short_func, meta_func):
+    """
+    Единая решающая логика трёх популяций.
+    Возвращает желаемую позицию: 1 = LONG, -1 = SHORT, 0 = FLAT.
+    При любой ошибке вычисления дерева -> 0 (FLAT).
+    """
+    try:
+        long_raw = long_func(bar["price"], bar["sma"], bar["ema"], bar["lwma"], bar["cur"])
+        short_raw = short_func(bar["price"], bar["sma"], bar["ema"], bar["lwma"], bar["cur"])
+        long_active = 1.0 if long_raw > 0 else 0.0
+        short_active = 1.0 if short_raw > 0 else 0.0
+        meta_sig = meta_func(long_active, short_active)
+    except Exception:
+        return 0, 0.0, 0.0, 0.0
+
+    if meta_sig > LONG_THRESHOLD:
+        desired = 1
+    elif meta_sig < SHORT_THRESHOLD:
+        desired = -1
+    else:
+        desired = 0
+    return desired, long_active, short_active, meta_sig
+
+
+# =====================================================================
 # FITNESS FUNCTIONS
 # Новая логика:
 #   Long/Short выдают true/false на каждом баре.
@@ -184,7 +222,7 @@ def evalLongTrading(ind, bars):
     func = gp.compile(ind, pset_long)
 
     total_pct = 0.0
-    commission = 0.001  # 0.1% за сделку (вход + выход = 0.2%)
+    commission = COMMISSION
     was_open = False
     entry_price = 0.0
     trades_count = 0
@@ -193,7 +231,7 @@ def evalLongTrading(ind, bars):
         try:
             sig = func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
             is_open = sig > 0
-        except:
+        except Exception:
             is_open = False
 
         if is_open and not was_open:
@@ -226,8 +264,8 @@ def evalShortTrading(ind, bars):
     func = gp.compile(ind, pset_short)
 
     total_pct = 0.0
-    commission = 0.001  # 0.1%
-    short_cost_per_bar = 0.001  # 0.001% за бар удержания шорта (funding rate)
+    commission = COMMISSION
+    short_cost_per_bar = SHORT_COST_PER_BAR
     was_open = False
     entry_price = 0.0
     bars_held = 0
@@ -237,7 +275,7 @@ def evalShortTrading(ind, bars):
         try:
             sig = func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
             is_open = sig > 0
-        except:
+        except Exception:
             is_open = False
 
         if is_open and not was_open:
@@ -276,31 +314,15 @@ def evalMetaTrading(ind, bars, best_long_func, best_short_func):
     meta_func = gp.compile(ind, pset_meta)
 
     total_pct = 0.0
-    commission = 0.001
-    short_cost_per_bar = 0.001  # 0.001% за бар удержания шорта
+    commission = COMMISSION
+    short_cost_per_bar = SHORT_COST_PER_BAR
     position = 0  # 0=flat, 1=long, -1=short
     entry_price = 0.0
     bars_held = 0
     trades_count = 0
 
     for b in bars:
-        try:
-            long_raw = best_long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-            short_raw = best_short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-
-            long_active = 1.0 if long_raw > 0 else 0.0
-            short_active = 1.0 if short_raw > 0 else 0.0
-
-            meta_sig = meta_func(long_active, short_active)
-
-            if meta_sig > 0.5:
-                desired = 1
-            elif meta_sig < -0.5:
-                desired = -1
-            else:
-                desired = 0
-        except:
-            desired = 0
+        desired, _, _, _ = decide_position(b, best_long_func, best_short_func, meta_func)
 
         if position != desired:
             # Закрываем текущую
@@ -365,33 +387,15 @@ def plot_signals(df, bars, best_long, best_short, best_meta, pset_l, pset_s, pse
     position = 0  # 0=flat, 1=long, -1=short
     entry_price = 0.0
     total_pct = 0.0
-    commission = 0.001
-    short_cost_per_bar = 0.001
+    commission = COMMISSION
+    short_cost_per_bar = SHORT_COST_PER_BAR
     bars_held = 0
 
     for i, b in enumerate(bars):
         prices.append(b["cur"])
 
-        try:
-            long_raw = long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-            short_raw = short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-
-            long_active = 1.0 if long_raw > 0 else 0.0
-            short_active = 1.0 if short_raw > 0 else 0.0
-
-            meta_raw = meta_func(long_active, short_active)
-
-            if meta_raw > 0.5:
-                desired = 1
-            elif meta_raw < -0.5:
-                desired = -1
-            else:
-                desired = 0
-        except:
-            long_active = 0.0
-            short_active = 0.0
-            meta_raw = 0.0
-            desired = 0
+        desired, long_active, short_active, meta_raw = decide_position(
+            b, long_func, short_func, meta_func)
 
         long_signals.append(long_active)
         short_signals.append(short_active)
@@ -620,20 +624,13 @@ def compare_strategies(bars: list, hofs, initial_balance: float = 10000,
     trades_pnl = []
 
     for b in bars:
-        try:
-            long_raw = best_long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-            short_raw = best_short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"])
-            la = 1.0 if long_raw > 0 else 0.0
-            sa = 1.0 if short_raw > 0 else 0.0
-            meta = meta_func(la, sa)
-            if meta > 0.5:
-                action = 'LONG'
-            elif meta < -0.5:
-                action = 'SHORT'
-            else:
-                action = 'CLOSE' if sim.position_type != 'FLAT' else 'HOLD'
-        except Exception:
-            action = 'HOLD'
+        desired, _, _, _ = decide_position(b, best_long_func, best_short_func, meta_func)
+        if desired == 1:
+            action = 'LONG'
+        elif desired == -1:
+            action = 'SHORT'
+        else:
+            action = 'CLOSE' if sim.position_type != 'FLAT' else 'HOLD'
 
         trade = sim.execute_trade(timestamp=None, action=action, price=b["cur"])
         if trade and trade.pnl != 0.0:

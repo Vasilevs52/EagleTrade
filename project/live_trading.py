@@ -23,6 +23,7 @@ from binance.client import Client
 
 from deap import gp
 from primitives import pset_long, pset_short, pset_meta
+from signals import decide_position
 
 
 # ---------------------------------------------------------------------
@@ -188,22 +189,14 @@ def paper_trade_history(hofs, symbol="BTCUSDT", interval="1h", window=50,
 def compute_action(bar, long_func, short_func, meta_func):
     """
     Возвращает 'LONG' / 'SHORT' / 'FLAT' по сигналу трёх популяций.
-    Та же решающая логика: meta > 0.5 -> LONG, < -0.5 -> SHORT, иначе FLAT.
+    Использует ту же decide_position(), что и бэктест — единый источник правды.
     """
-    try:
-        long_raw = long_func(bar["price"], bar["sma"], bar["ema"], bar["lwma"], bar["cur"])
-        short_raw = short_func(bar["price"], bar["sma"], bar["ema"], bar["lwma"], bar["cur"])
-        la = 1.0 if long_raw > 0 else 0.0
-        sa = 1.0 if short_raw > 0 else 0.0
-        meta = meta_func(la, sa)
-        if meta > 0.5:
-            return "LONG"
-        elif meta < -0.5:
-            return "SHORT"
-        else:
-            return "FLAT"
-    except Exception:
-        return "FLAT"
+    desired, _, _, _ = decide_position(bar, long_func, short_func, meta_func)
+    if desired == 1:
+        return "LONG"
+    elif desired == -1:
+        return "SHORT"
+    return "FLAT"
 
 
 # ---------------------------------------------------------------------
