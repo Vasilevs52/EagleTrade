@@ -1,0 +1,12 @@
+[
+  {
+    "seed": 981744865,
+    "fitness": 51.66920468989452,
+    "best_long_str": "scalar_sub(scalar_clip01(vec_zscore(vec_neg(vec_sqrt(IN2)))), scalar_sign(sum_gt(IN3, IN1)))",
+    "best_short_str": "vec_rsi(vec_sub(vec_abs(ema_series(sma_series(IN2, 0.41581190068450624), scalar_sign(0.7300787118185961))), vec_sqrt(if_else(IN4, IN0, IN3))))",
+    "best_meta_str": "scalar_neg(meta_sub(scalar_add(SIG1, -0.12063754971992369), meta_nand(scalar_sub(bool_if_then_else(SIG1, SIG1, SIG0), scalar_tanh(SIG0)), SIG1)))",
+    "best_long_fit": 3.0679259164093735,
+    "best_short_fit": 44.14870090185035,
+    "best_meta_fit": 51.66920468989452
+  }
+]

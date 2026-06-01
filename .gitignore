@@ -10,7 +10,8 @@ venv/
 # Артефакты запусков EagleTrade
 project/run_out.txt
 project/results/
-project/evolution_results.json
+# evolution_results.json НЕ игнорируем — это результат эволюции,
+# версионируем его, чтобы переносить между машинами через git pull/push.
 
 # Сгенерированные графики (создаются кодом при каждом прогоне)
 project/backtest_result.png
