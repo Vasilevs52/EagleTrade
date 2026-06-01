@@ -24,6 +24,7 @@ from binance.client import Client
 from deap import gp
 from primitives import pset_long, pset_short, pset_meta
 from signals import decide_position
+from config import CFG
 
 
 # ---------------------------------------------------------------------
@@ -63,11 +64,13 @@ def make_testnet_client(api_key=None, api_secret=None):
 # ДАННЫЕ И ИНДИКАТОРЫ (как в build_input_vectors, но для последнего бара)
 # ---------------------------------------------------------------------
 
-def get_recent_klines(client, symbol="BTCUSDT", interval="1h", limit=120):
+def get_recent_klines(client, symbol=None, interval=None, limit=120):
     """
-    Тянет свежие свечи с фьючерсного testnet и возвращает DataFrame
+    Тянет свежие свечи с фьючерсного эндпоинта и возвращает DataFrame
     со столбцом Price (= цена закрытия).
     """
+    symbol = symbol or CFG.symbol
+    interval = interval or CFG.interval
     raw = client.futures_klines(symbol=symbol, interval=interval, limit=limit)
     cols = ["Open Time", "Open", "High", "Low", "Close", "Volume",
             "Close Time", "QAV", "Trades", "TBBAV", "TBQAV", "Ignore"]
@@ -77,11 +80,12 @@ def get_recent_klines(client, symbol="BTCUSDT", interval="1h", limit=120):
     return df[["Open Time", "Price"]]
 
 
-def build_last_input(df: pd.DataFrame, window: int = 50):
+def build_last_input(df: pd.DataFrame, window: int = None):
     """
     Строит входной вектор для ПОСЛЕДНЕГО завершённого бара —
     в том же формате, что build_input_vectors (price/sma/ema/lwma/cur).
     """
+    window = window if window is not None else CFG.window
     if len(df) < window + 1:
         return None
 
@@ -107,11 +111,13 @@ def build_last_input(df: pd.DataFrame, window: int = 50):
 # СИГНАЛ СТРАТЕГИИ (та же логика, что в compare_strategies)
 # ---------------------------------------------------------------------
 
-def get_public_klines(symbol="BTCUSDT", interval="1h", limit=500):
+def get_public_klines(symbol=None, interval=None, limit=500):
     """
     Тянет свечи с ПУБЛИЧНОГО эндпоинта Binance Futures — БЕЗ ключей.
     Возвращает DataFrame со столбцами Open Time, Price (close).
     """
+    symbol = symbol or CFG.symbol
+    interval = interval or CFG.interval
     client = Client()  # без ключей: публичные данные доступны
     raw = client.futures_klines(symbol=symbol, interval=interval, limit=limit)
     cols = ["Open Time", "Open", "High", "Low", "Close", "Volume",
@@ -122,9 +128,9 @@ def get_public_klines(symbol="BTCUSDT", interval="1h", limit=500):
     return df[["Open Time", "Price"]]
 
 
-def paper_trade_history(hofs, symbol="BTCUSDT", interval="1h", window=50,
-                        limit=500, initial_balance=5000.0, risk_percent=0.02,
-                        commission=0.001):
+def paper_trade_history(hofs, symbol=None, interval=None, window=None,
+                        limit=500, initial_balance=None, risk_percent=None,
+                        commission=None):
     """
     БЫСТРАЯ СИМУЛЯЦИЯ по истории на ЖИВЫХ ценах Binance (без ключей).
     Прогоняет стратегию по последним `limit` свечам, исполняя сделки по
@@ -132,6 +138,13 @@ def paper_trade_history(hofs, symbol="BTCUSDT", interval="1h", window=50,
     """
     from signals import TradingSimulator
     from data_loader import add_indicators, build_input_vectors
+
+    symbol = symbol or CFG.symbol
+    interval = interval or CFG.interval
+    window = window if window is not None else CFG.window
+    initial_balance = initial_balance if initial_balance is not None else CFG.initial_balance
+    risk_percent = risk_percent if risk_percent is not None else CFG.risk_percent
+    commission = commission if commission is not None else CFG.commission
 
     long_func = gp.compile(hofs[0][0], pset_long)
     short_func = gp.compile(hofs[1][0], pset_short)
@@ -280,21 +293,26 @@ def open_position(client, symbol, side, usdt_balance, price, risk_percent, step,
 # ОСНОВНОЙ ЦИКЛ
 # ---------------------------------------------------------------------
 
-def run_live_trading(hofs, symbol="BTCUSDT", interval="1h", window=50,
-                     risk_percent=0.02, leverage=1, poll_seconds=60,
+def run_live_trading(hofs, symbol=None, interval=None, window=None,
+                     risk_percent=None, leverage=1, poll_seconds=60,
                      max_iterations=None, api_key=None, api_secret=None):
     """
-    Запускает торговлю на ТЕСТОВОМ балансе Binance Futures Testnet.
+    Запускает торговлю на ТЕСТОВОМ балансе Binance Futures (demo).
 
     hofs          — (hof_long, hof_short, hof_meta); берём [0] каждого
-    symbol        — торговая пара
-    interval      — таймфрейм свечей
-    window        — окно индикаторов (как при обучении: 50)
-    risk_percent  — доля баланса на позицию (0.02 = 2%)
+    symbol        — торговая пара (по умолчанию CFG.symbol)
+    interval      — таймфрейм свечей (по умолчанию CFG.interval)
+    window        — окно индикаторов (как при обучении: CFG.window)
+    risk_percent  — доля баланса на позицию (по умолчанию CFG.risk_percent)
     leverage      — кредитное плечо (1 = без плеча)
     poll_seconds  — пауза между проверками сигнала
     max_iterations— None = бесконечно; иначе остановиться после N итераций
     """
+    symbol = symbol or CFG.symbol
+    interval = interval or CFG.interval
+    window = window if window is not None else CFG.window
+    risk_percent = risk_percent if risk_percent is not None else CFG.risk_percent
+
     client = make_testnet_client(api_key, api_secret)
 
     # Компилируем стратегию один раз

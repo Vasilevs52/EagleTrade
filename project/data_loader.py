@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 from binance.client import Client
 
+from config import CFG
+
 
 class BinanceBroker():
     @staticmethod
@@ -45,7 +47,8 @@ def get_history_data(symbol, interval, start_date, end_date):
     return df
 
 
-def add_indicators(df: pd.DataFrame, window: int = 50):
+def add_indicators(df: pd.DataFrame, window: int = None):
+    window = window if window is not None else CFG.window
     df[f"SMA_{window}"] = df["Price"].rolling(window).mean()
     df[f"EMA_{window}"] = df["Price"].ewm(span=window, adjust=False).mean()
     weights = np.arange(1, window + 1)
@@ -54,7 +57,8 @@ def add_indicators(df: pd.DataFrame, window: int = 50):
     return df
 
 
-def build_input_vectors(df: pd.DataFrame, min_window: int = 50):
+def build_input_vectors(df: pd.DataFrame, min_window: int = None):
+    min_window = min_window if min_window is not None else CFG.window
     bars = []
     for i in range(min_window, len(df) - 1):
         start = i - min_window
@@ -69,8 +73,9 @@ def build_input_vectors(df: pd.DataFrame, min_window: int = 50):
     return bars
 
 
-def load_period(symbol, interval, start, end, window=50):
+def load_period(symbol, interval, start, end, window=None):
     """Загружает один период, добавляет индикаторы, возвращает (df, bars)."""
+    window = window if window is not None else CFG.window
     df = get_history_data(symbol, interval, start, end)
     df = add_indicators(df, window=window)
     bars = build_input_vectors(df, min_window=window)

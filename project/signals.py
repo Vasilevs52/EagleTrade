@@ -14,6 +14,7 @@ from deap import gp
 
 from primitives import pset_long, pset_short, pset_meta
 from data_loader import get_history_data, add_indicators, build_input_vectors
+from config import CFG
 
 
 # =====================================================================
@@ -33,8 +34,9 @@ class Trade:
 
 
 class TradingSimulator:
-    def __init__(self, initial_balance: float = 10000, commission: float = 0.001,
-                 risk_percent: float = 0.02):
+    def __init__(self, initial_balance: float = CFG.initial_balance,
+                 commission: float = CFG.commission,
+                 risk_percent: float = CFG.risk_percent):
         self.initial_balance = initial_balance
         self.balance = initial_balance
         self.commission = commission
@@ -175,10 +177,10 @@ class TradingSimulator:
 # разъехаться. Теперь — одно место.
 # =====================================================================
 
-COMMISSION = 0.001          # 0.1% за сделку (вход + выход = 0.2%)
-SHORT_COST_PER_BAR = 0.001  # 0.001% за бар удержания шорта (funding rate)
-LONG_THRESHOLD = 0.5        # meta_sig > LONG_THRESHOLD  -> LONG
-SHORT_THRESHOLD = -0.5      # meta_sig < SHORT_THRESHOLD -> SHORT
+COMMISSION = CFG.commission          # 0.1% за сделку (вход + выход = 0.2%)
+SHORT_COST_PER_BAR = CFG.short_cost_per_bar  # за бар удержания шорта (funding rate)
+LONG_THRESHOLD = CFG.long_threshold  # meta_sig > LONG_THRESHOLD  -> LONG
+SHORT_THRESHOLD = CFG.short_threshold  # meta_sig < SHORT_THRESHOLD -> SHORT
 
 
 def decide_position(bar, long_func, short_func, meta_func):
@@ -577,8 +579,8 @@ def compute_metrics(equity_curve: list, trades_pnl: list,
     }
 
 
-def buy_and_hold_benchmark(bars: list, initial_balance: float = 10000,
-                           commission: float = 0.001) -> dict:
+def buy_and_hold_benchmark(bars: list, initial_balance: float = CFG.initial_balance,
+                           commission: float = CFG.commission) -> dict:
     """
     Эталонная стратегия: купить на первом баре, держать до конца.
     Возвращает метрики, сопоставимые с compute_metrics().
@@ -600,8 +602,8 @@ def buy_and_hold_benchmark(bars: list, initial_balance: float = 10000,
     return compute_metrics(equity, [final_pnl])
 
 
-def compare_strategies(bars: list, hofs, initial_balance: float = 10000,
-                       risk_percent: float = 0.02, label: str = ""):
+def compare_strategies(bars: list, hofs, initial_balance: float = CFG.initial_balance,
+                       risk_percent: float = CFG.risk_percent, label: str = ""):
     """
     Прогоняет GP-бота и buy & hold на одних и тех же барах,
     печатает сравнительную таблицу метрик.
@@ -672,7 +674,7 @@ def compare_strategies(bars: list, hofs, initial_balance: float = 10000,
 # =====================================================================
 
 def plot_equity_comparison(bot_equity, bh_equity, title, filename,
-                           initial_balance=10000):
+                           initial_balance=CFG.initial_balance):
     """
     Рисует две кривые капитала на одном графике: бот vs B&H.
     Дополнительно показывает зоны просадки.
@@ -791,13 +793,15 @@ def plot_summary_bars(results, filename="summary_bars.png"):
 # OUT-OF-SAMPLE VALIDATION
 # =====================================================================
 
-def validate_on_new_data(hofs, val_symbol="BTCUSDT", val_interval="1h",
+def validate_on_new_data(hofs, val_symbol=None, val_interval=None,
                          val_start="02-01-2024", val_end="03-01-2024"):
     """
     Прогоняет лучших индивидов на новых данных (out-of-sample).
     Загружает новый кусок, строит индикаторы, выводит график и статистику.
     Возвращает кортеж (val_df, val_bars). При ошибке возвращает (None, []).
     """
+    val_symbol = val_symbol or CFG.symbol
+    val_interval = val_interval or CFG.interval
     hof_long, hof_short, hof_meta = hofs
 
     print("\n" + "=" * 60)
@@ -807,8 +811,8 @@ def validate_on_new_data(hofs, val_symbol="BTCUSDT", val_interval="1h",
     print("=" * 60)
 
     val_df = get_history_data(val_symbol, val_interval, val_start, val_end)
-    val_df = add_indicators(val_df, window=50)
-    val_bars = build_input_vectors(val_df, min_window=50)
+    val_df = add_indicators(val_df, window=CFG.window)
+    val_bars = build_input_vectors(val_df, min_window=CFG.window)
 
     print(f"Validation bars: {len(val_bars)}")
 

@@ -7,6 +7,7 @@ import multiprocessing as mp
 
 import matplotlib.pyplot as plt
 
+from config import CFG
 from data_loader import BinanceBroker, load_period
 from primitives import pset_long, pset_short, pset_meta
 from signals import (
@@ -39,14 +40,19 @@ from storage import (
 # процесс повторно импортирует main и должен видеть bars/ndf.
 # =====================================================================
 
-print("Loading TRAIN data: январь 2024 (тренд) + сентябрь 2023 (флэт)...")
-ndf_trend, bars_trend = load_period("BTCUSDT", "1h", "01-01-2024", "02-01-2024")
-ndf_flat, bars_flat = load_period("BTCUSDT", "1h", "09-01-2023", "10-01-2023")
+print(f"Loading TRAIN data ({CFG.symbol} {CFG.interval}): "
+      f"{len(CFG.train_periods)} периодов...")
+_train_dfs, _train_bars = [], []
+for _start, _end in CFG.train_periods:
+    _df, _b = load_period(CFG.symbol, CFG.interval, _start, _end)
+    _train_dfs.append(_df)
+    _train_bars.append(_b)
+    print(f"  {_start}–{_end}: {len(_b)} bars")
 
-# Объединяем бары: фитнес будет суммой P&L по обоим периодам.
-bars = bars_trend + bars_flat
-ndf = ndf_trend  # для plot_signals на тренировочных (берём первый кусок)
-print(f"  Trend bars: {len(bars_trend)}, Flat bars: {len(bars_flat)}, Total: {len(bars)}")
+# Объединяем бары всех периодов: фитнес будет суммой P&L по ним.
+bars = [b for chunk in _train_bars for b in chunk]
+ndf = _train_dfs[0]  # для plot_signals на тренировочных (берём первый кусок)
+print(f"  Total: {len(bars)} bars")
 
 NUM_THREADS = 1   # теперь это процессы
 
@@ -159,14 +165,15 @@ def analyze_and_visualize(hofs, title_prefix="[BEST] "):
     print("# OOS ПЕРИОД 1: БЫЧИЙ РЫНОК (февраль 2024)")
     print("#" * 70)
     val_df_bull, val_bars_bull = validate_on_new_data(
-        hofs, val_symbol="BTCUSDT", val_interval="1h",
-        val_start="02-01-2024", val_end="03-01-2024",
+        hofs, val_symbol=CFG.symbol, val_interval=CFG.interval,
+        val_start=CFG.val_bull[0], val_end=CFG.val_bull[1],
     )
 
     bot_metrics_bull, bh_metrics_bull = {}, {}
     if val_bars_bull:
         bot_metrics_bull, bh_metrics_bull, bot_eq_bull, bh_eq_bull = compare_strategies(
-            val_bars_bull, hofs, risk_percent=0.02, label="BULL | Risk-managed 2%")
+            val_bars_bull, hofs, risk_percent=CFG.risk_percent,
+            label=f"BULL | Risk-managed {CFG.risk_percent:.0%}")
         compare_strategies(val_bars_bull, hofs, risk_percent=1.0,
                            label="BULL | Full exposure 100%")
         plot_equity_comparison(
@@ -180,14 +187,15 @@ def analyze_and_visualize(hofs, title_prefix="[BEST] "):
     print("# OOS ПЕРИОД 2: СЛАБЫЙ МЕДВЕЖИЙ / БОКОВОЙ (май 2023)")
     print("#" * 70)
     val_df_flat, val_bars_flat = validate_on_new_data(
-        hofs, val_symbol="BTCUSDT", val_interval="1h",
-        val_start="05-01-2023", val_end="06-01-2023",
+        hofs, val_symbol=CFG.symbol, val_interval=CFG.interval,
+        val_start=CFG.val_bear[0], val_end=CFG.val_bear[1],
     )
 
     bot_metrics_bear, bh_metrics_bear = {}, {}
     if val_bars_flat:
         bot_metrics_bear, bh_metrics_bear, bot_eq_bear, bh_eq_bear = compare_strategies(
-            val_bars_flat, hofs, risk_percent=0.02, label="WEAK BEAR | Risk-managed 2%")
+            val_bars_flat, hofs, risk_percent=CFG.risk_percent,
+            label=f"WEAK BEAR | Risk-managed {CFG.risk_percent:.0%}")
         compare_strategies(val_bars_flat, hofs, risk_percent=1.0,
                            label="WEAK BEAR | Full exposure 100%")
         plot_equity_comparison(
@@ -272,16 +280,16 @@ def run_live_testnet():
           f"meta fitness={record.get('fitness')}")
 
     # Параметры торговли (можно поменять)
-    interval = input("Таймфрейм [1h] (Enter = 1h): ").strip() or "1h"
+    interval = input(f"Таймфрейм [{CFG.interval}] (Enter): ").strip() or CFG.interval
     poll_raw = input("Опрос, секунд [60] (Enter = 60): ").strip()
     poll = int(poll_raw) if poll_raw.isdigit() else 60
 
     run_live_trading(
         hofs,
-        symbol="BTCUSDT",
+        symbol=CFG.symbol,
         interval=interval,
-        window=50,
-        risk_percent=0.02,
+        window=CFG.window,
+        risk_percent=CFG.risk_percent,
         leverage=1,
         poll_seconds=poll,
         max_iterations=None,   # бесконечно, до Ctrl+C
@@ -307,13 +315,14 @@ def run_paper_trading():
     idx = max(0, min(idx, len(records) - 1))
     hofs = record_to_hofs(records[idx])
 
-    interval = input("Таймфрейм [1h] (Enter = 1h): ").strip() or "1h"
+    interval = input(f"Таймфрейм [{CFG.interval}] (Enter): ").strip() or CFG.interval
     lim_raw = input("Сколько свечей истории [500] (Enter = 500): ").strip()
     limit = int(lim_raw) if lim_raw.isdigit() else 500
 
     paper_trade_history(
-        hofs, symbol="BTCUSDT", interval=interval,
-        window=50, limit=limit, initial_balance=5000.0, risk_percent=0.02,
+        hofs, symbol=CFG.symbol, interval=interval,
+        window=CFG.window, limit=limit,
+        initial_balance=CFG.initial_balance, risk_percent=CFG.risk_percent,
     )
 
 
@@ -331,7 +340,8 @@ if __name__ == '__main__':
 
     # Загрузка через BinanceBroker (для проверки соединения)
     broker = BinanceBroker()
-    data = broker.get_history_data(['BTCUSDT'], '1h', '2024-01-01', '2024-02-01')
+    data = broker.get_history_data([CFG.symbol], CFG.interval,
+                                   '2024-01-01', '2024-02-01')
     print(f"Loaded {len(data)} candles")
     print(data.head())
 
