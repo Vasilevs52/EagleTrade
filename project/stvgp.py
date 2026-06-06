@@ -115,7 +115,7 @@ def evolve_one_gen(pop, toolbox, hof, mu=100, lambda_=150, cxpb=0.6, mutpb=0.3):
     return pop
 
 
-def evolve(bars, ndf, seed=None, pop_size=25, offspring=32, ngen=10,
+def evolve(bars, ndf, seed=None, pop_size=250, offspring=320, ngen=300,
            do_plot=True):
     """
     Коэволюция трёх популяций на наборе баров `bars`.
