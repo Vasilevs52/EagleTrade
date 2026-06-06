@@ -66,7 +66,15 @@ class TradingSimulator:
         pnl = 0.0
 
         if action == 'HOLD' or self.balance <= 0:
-            self.equity_curve.append(self.balance)
+            # Пишем mark-to-market equity (баланс + плавающий PnL открытой
+            # позиции), а не голый balance — иначе просадка внутри удержания
+            # позиции невидима и Sharpe/MaxDD занижают риск.
+            equity_now = self.balance + self.get_unrealized_pnl(price)
+            self.max_balance = max(self.max_balance, equity_now)
+            if self.max_balance > 0:
+                dd = (self.max_balance - equity_now) / self.max_balance
+                self.max_drawdown = max(self.max_drawdown, dd)
+            self.equity_curve.append(equity_now)
             return None
 
         if action == 'LONG':
@@ -124,10 +132,14 @@ class TradingSimulator:
             self.position_price = 0.0
             self.position_type = 'FLAT'
 
-        self.max_balance = max(self.max_balance, self.balance)
-        current_drawdown = (self.max_balance - self.balance) / self.max_balance if self.max_balance > 0 else 0
+        # Mark-to-market equity = реализованный баланс + плавающий PnL.
+        # На баре входа/закрытия unrealized по этой же price = 0, но для
+        # единообразия считаем через equity_now (важно для HOLD-баров выше).
+        equity_now = self.balance + self.get_unrealized_pnl(price)
+        self.max_balance = max(self.max_balance, equity_now)
+        current_drawdown = (self.max_balance - equity_now) / self.max_balance if self.max_balance > 0 else 0
         self.max_drawdown = max(self.max_drawdown, current_drawdown)
-        self.equity_curve.append(self.balance)
+        self.equity_curve.append(equity_now)
 
         trade = Trade(
             timestamp=timestamp, action=action, price=price,
@@ -567,10 +579,15 @@ def plot_signals(df, bars, best_long, best_short, best_meta, pset_l, pset_s, pse
 
 def compute_metrics(equity_curve: list, trades_pnl: list,
                     bars_per_year: float = 24 * 365,
-                    risk_free_rate: float = 0.0) -> dict:
+                    risk_free_rate: float = 0.0,
+                    initial_balance: float = None) -> dict:
     """
     Считает риск-метрики по equity-кривой и списку pnl сделок.
     bars_per_year=24*365 для часового таймфрейма крипты (24/7).
+
+    initial_balance — если задан, Total Return считается от него (а не от
+    eq[0], который = баланс ПОСЛЕ первого бара). Это делает Total Return в
+    таблице согласованным с quick_profit_summary (sim.balance/initial-1).
     """
     if len(equity_curve) < 2:
         return {}
@@ -609,8 +626,9 @@ def compute_metrics(equity_curve: list, trades_pnl: list,
     profit_factor = (sum(wins) / abs(sum(losses))) if losses and sum(losses) != 0 else float('inf')
     expectancy = win_rate * avg_win - (1 - win_rate) * abs(avg_loss)
 
+    base = initial_balance if (initial_balance and initial_balance > 0) else eq[0]
     return {
-        'Total Return (%)': (eq[-1] / eq[0] - 1) * 100,
+        'Total Return (%)': (eq[-1] / base - 1) * 100,
         'CAGR (%)': cagr * 100,
         'Max Drawdown (%)': max_dd * 100,
         'Sharpe (ann.)': sharpe,
@@ -646,7 +664,7 @@ def buy_and_hold_benchmark(bars: list, initial_balance: float = CFG.initial_bala
     equity[-1] *= (1 - commission)
 
     final_pnl = equity[-1] - initial_balance
-    return compute_metrics(equity, [final_pnl])
+    return compute_metrics(equity, [final_pnl], initial_balance=initial_balance)
 
 
 def compare_strategies(bars: list, hofs, initial_balance: float = CFG.initial_balance,
@@ -686,7 +704,8 @@ def compare_strategies(bars: list, hofs, initial_balance: float = CFG.initial_ba
             trades_pnl.append(trade.pnl)
 
     sim.close_position(timestamp=None, price=bars[-1]["cur"])
-    bot_metrics = compute_metrics(sim.equity_curve, trades_pnl)
+    bot_metrics = compute_metrics(sim.equity_curve, trades_pnl,
+                                  initial_balance=initial_balance)
 
     # --- Buy & Hold ---
     bh_metrics = buy_and_hold_benchmark(bars, initial_balance=initial_balance)
