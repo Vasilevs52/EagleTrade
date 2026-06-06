@@ -162,6 +162,23 @@ class TradingSimulator:
         else:
             return abs(self.position) * (self.position_price - current_price)
 
+    def _equity_max_drawdown(self):
+        """Max drawdown по mark-to-market equity-кривой — ЕДИНЫЙ источник
+        с compute_metrics (раньше get_statistics брал self.max_drawdown,
+        а compute_metrics считал по кривой -> числа расходились)."""
+        if len(self.equity_curve) < 2:
+            return 0.0
+        peak = self.equity_curve[0]
+        max_dd = 0.0
+        for v in self.equity_curve:
+            if v > peak:
+                peak = v
+            if peak > 0:
+                dd = (peak - v) / peak
+                if dd > max_dd:
+                    max_dd = dd
+        return max_dd
+
     def get_statistics(self):
         if not self.trades:
             return {}
@@ -173,7 +190,7 @@ class TradingSimulator:
             'Initial Balance': self.initial_balance,
             'Final Balance': self.balance,
             'Total Return (%)': total_return,
-            'Max Drawdown (%)': self.max_drawdown * 100,
+            'Max Drawdown (%)': self._equity_max_drawdown() * 100,
             'Total Trades': len(self.trades),
             'Profitable Trades': len(profitable),
             'Losing Trades': len(losing),
@@ -599,6 +616,8 @@ def compute_metrics(equity_curve: list, trades_pnl: list,
     if len(rets) == 0:
         return {}
 
+    base = initial_balance if (initial_balance and initial_balance > 0) else eq[0]
+
     mu = rets.mean()
     sigma = rets.std(ddof=1) if len(rets) > 1 else 0.0
     downside = rets[rets < 0]
@@ -609,29 +628,48 @@ def compute_metrics(equity_curve: list, trades_pnl: list,
     sharpe = (mu - rf_per_bar) / sigma * ann_factor if sigma > 0 else 0.0
     sortino = (mu - rf_per_bar) / sigma_down * ann_factor if sigma_down > 0 else 0.0
 
+    # #4 Exposure: доля баров с ненулевой доходностью (капитал «в работе»).
+    # Обычный Sharpe выше считается по ВСЕМ барам, включая простой в кэше —
+    # это занижает sigma и завышает Sharpe тем сильнее, чем меньше exposure.
+    # Поэтому добавляем exposure (для интерпретации) и Sharpe(active) —
+    # по торговым барам, чтобы видеть оба числа.
+    active = rets[np.abs(rets) > 1e-12]
+    exposure = len(active) / len(rets) if len(rets) > 0 else 0.0
+    if len(active) > 1:
+        mu_a = active.mean()
+        sg_a = active.std(ddof=1)
+        sharpe_active = (mu_a - rf_per_bar) / sg_a * ann_factor if sg_a > 0 else 0.0
+    else:
+        sharpe_active = 0.0
+
+    # CAGR от initial_balance (а не eq[0] = баланс после 1-го бара) —
+    # тот же фикс, что для Total Return.
     years = len(rets) / bars_per_year
-    cagr = (eq[-1] / eq[0]) ** (1 / years) - 1 if years > 0 and eq[0] > 0 else 0.0
+    cagr = (eq[-1] / base) ** (1 / years) - 1 if years > 0 and base > 0 and eq[-1] > 0 else 0.0
 
     running_max = np.maximum.accumulate(eq)
     drawdowns = (running_max - eq) / running_max
     max_dd = drawdowns.max() if len(drawdowns) > 0 else 0.0
 
-    calmar = cagr / max_dd if max_dd > 0 else float('inf')
+    # inf вместо calmar/profit_factor ломает строгий JSON (Infinity) и графики.
+    # При отсутствии просадки/убытков возвращаем nan (json пишет null) — честнее.
+    calmar = cagr / max_dd if max_dd > 0 else float('nan')
 
     wins = [p for p in trades_pnl if p > 0]
     losses = [p for p in trades_pnl if p < 0]
     win_rate = len(wins) / len(trades_pnl) if trades_pnl else 0.0
     avg_win = np.mean(wins) if wins else 0.0
     avg_loss = np.mean(losses) if losses else 0.0
-    profit_factor = (sum(wins) / abs(sum(losses))) if losses and sum(losses) != 0 else float('inf')
+    profit_factor = (sum(wins) / abs(sum(losses))) if losses and sum(losses) != 0 else float('nan')
     expectancy = win_rate * avg_win - (1 - win_rate) * abs(avg_loss)
 
-    base = initial_balance if (initial_balance and initial_balance > 0) else eq[0]
     return {
         'Total Return (%)': (eq[-1] / base - 1) * 100,
         'CAGR (%)': cagr * 100,
         'Max Drawdown (%)': max_dd * 100,
         'Sharpe (ann.)': sharpe,
+        'Sharpe active (ann.)': sharpe_active,
+        'Exposure (%)': exposure * 100,
         'Sortino (ann.)': sortino,
         'Calmar': calmar,
         'Volatility (ann. %)': sigma * ann_factor * 100,
