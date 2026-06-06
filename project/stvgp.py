@@ -1,374 +1,214 @@
+# =====================================================================
+# STVGP — движок генетического программирования (DEAP)
+# Коэволюция трёх популяций: long / short / meta.
+# =====================================================================
+
+import random
+from datetime import datetime
+
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.optimize import brentq
-
-# ─────────────────────────────────────────────────────────────
-# 1. Тестовые функции
-# ─────────────────────────────────────────────────────────────
-def find_root_numerically(fp, a, b):
-    """Численное нахождение корня для определения точного минимума"""
-    try:
-        return brentq(fp, a, b)
-    except:
-        return None
-
-TEST_FUNCS = {
-    "1": {
-        "name": "Полином: f(x) = x⁴ - 4x³ + 6x²",
-        "f": lambda x: x ** 4 - 4 * x ** 3 + 6 * x ** 2,
-        "fp": lambda x: 4 * x ** 3 - 12 * x ** 2 + 12 * x,  # = 4x(x² - 3x + 3)
-        "interval": (-0.5, 2.5),
-        "x_true_num": None  # Будет вычислено
-    },
-    "2": {
-        "name": "Экспоненциальная: f(x) = eˣ - 2x",
-        "f": lambda x: np.exp(x) - 2 * x,
-        "fp": lambda x: np.exp(x) - 2,
-        "interval": (0.0, 2.0),
-        "x_true_num": None
-    },
-    "3": {
-        "name": "Тригонометрическая: f(x) = sin(x) + x²/4",
-        "f": lambda x: np.sin(x) + x ** 2 / 4,
-        "fp": lambda x: np.cos(x) + x / 2,
-        "interval": (-2.0, 1.0),
-        "x_true_num": None
-    },
-    "4": {
-        "name": "Плохая для секущих: f(x) = x³",
-        "f": lambda x: x**3,
-        "fp": lambda x: 3 * x**2,
-        "interval": (-1.0, 1.0),
-        "x_true_num": 0.0
-    }
-}
-
-# Вычисляем точные корни заранее
-for key in TEST_FUNCS:
-    func = TEST_FUNCS[key]
-    root = find_root_numerically(func['fp'], *func['interval'])
-    func['x_true'] = root if root is not None else 0.0
-    print(f"Функция {key}: точный корень f'(x)=0 найден: x* = {func['x_true']:.10f}")
-
-# ─────────────────────────────────────────────────────────────
-# 2. Методы оптимизации
-# ─────────────────────────────────────────────────────────────
-def bisection_method(f, a, b, x_true,
-                     tol=1e-12,
-                     max_iter=100):
-
-    history = []
-    stop_reason = "Достигнут max_iter"
-
-    if a >= b:
-        print("[WARNING] Некорректный интервал")
-        return {
-            "history": [],
-            "iterations": 0,
-            "final_error": None,
-            "final_x": None,
-            "stop_reason": "Некорректный интервал"
-        }
-
-    # Начальные точки
-    x1 = a + (b - a) / 4
-    x2 = (a + b) / 2
-    x3 = b - (b - a) / 4
-
-    f1 = f(x1)
-    f2 = f(x2)
-    f3 = f(x3)
-
-    for i in range(max_iter):
-
-        # Проверка NaN
-        if np.isnan(f1) or np.isnan(f2) or np.isnan(f3):
-            stop_reason = f"NaN на итерации {i+1}"
-            break
-
-        # Сужение интервала
-        if f1 <= f2:
-
-            # Оставляем [a, x2]
-            b = x2
-
-            # старая x1 становится новой серединой
-            x2 = x1
-            f2 = f1
-
-            # новые внутренние точки
-            x1 = a + (x2 - a) / 2
-            x3 = x2 + (b - x2) / 2
-
-            f1 = f(x1)
-            f3 = f(x3)
-
-        else:
-
-            if f2 <= f3:
-
-                # Оставляем [x1, x3]
-                a = x1
-                b = x3
-
-                # x2 уже середина нового интервала
-                # f2 уже известно
-
-                x1 = a + (x2 - a) / 2
-                x3 = x2 + (b - x2) / 2
-
-                f1 = f(x1)
-                f3 = f(x3)
-
-            else:
-
-                # Оставляем [x2, b]
-                a = x2
-
-                # старая x3 становится новой серединой
-                x2 = x3
-                f2 = f3
-
-                # новые внутренние точки
-                x1 = a + (x2 - a) / 2
-                x3 = x2 + (b - x2) / 2
-
-                f1 = f(x1)
-                f3 = f(x3)
-
-        current_x = x2
-
-        err = abs(current_x - x_true)
-        history.append(err)
-
-        # Критерий остановки
-        if (b - a) / 2 < tol:
-            stop_reason = "Интервал стал меньше tol"
-            break
-
-        if abs(b - a) < 1e-15:
-            stop_reason = "Интервал слишком мал"
-            break
-    final_x = (a + b) / 2
-
-    return {
-        "history": history,
-        "iterations": len(history),
-        "final_error": history[-1] if history else None,
-        "final_x": final_x,
-        "stop_reason": stop_reason
-    }
-
-def secant_method(fp, a, b, x_true,
-                  tol=1e-12,
-                  max_iter=100):
-
-    history = []
-    stop_reason = "Достигнут max_iter"
-
-    c = None
-    f_a, f_b = fp(a), fp(b)
-
-    for i in range(max_iter):
-
-        denom = f_b - f_a
-
-        if abs(denom) < 1e-14:
-            stop_reason = f"Деление на почти ноль (итерация {i+1})"
-            break
-
-        c = a - f_a * (b - a) / denom
-
-        err = abs(c - x_true)
-        history.append(err)
-
-        # Успешная остановка
-        if err < tol:
-            stop_reason = "Достигнута точность"
-            break
-
-        # Расходимость
-        if abs(c) > 1e8 or np.isnan(c):
-            stop_reason = f"Расходимость на итерации {i+1}"
-            break
-
-        # Переход
-        a, f_a = b, f_b
-        b, f_b = c, fp(c)
-
-    final_x = c
-
-    return {
-        "history": history,
-        "iterations": len(history),
-        "final_error": history[-1] if history else None,
-        "final_x": final_x,
-        "stop_reason": stop_reason
-    }
-
-# ─────────────────────────────────────────────────────────────
-# 3. Анализ сходимости
-# ─────────────────────────────────────────────────────────────
-def analyze_convergence(history):
-    """Расчёт коэффициентов сходимости"""
-    if len(history) < 2:
-        return [], []
-
-    ratios = []
-    for i in range(1, len(history)):
-        if history[i - 1] > 1e-15:
-            ratios.append(history[i] / history[i - 1])
-        else:
-            ratios.append(0.0)
-
-    # Порядок сходимости
-    orders = []
-    for i in range(2, min(len(history) - 1, 15)):  # Только первые 15 итераций
-        e_prev, e_curr, e_next = history[i - 1], history[i], history[i + 1]
-
-        if e_prev > 1e-10 and e_curr > 1e-10 and e_next > 1e-15:
-            if e_curr < e_prev * 1.5:  # Ошибка не должна сильно расти
-                r1 = e_curr / e_prev
-                r2 = e_next / e_curr
-
-                if 1e-8 < r1 < 2.0 and 1e-8 < r2 < 2.0:
-                    try:
-                        if abs(np.log(r1 + 1e-30)) < 1e-12:
-                            continue
-
-                        order = np.log(r2 + 1e-30) / np.log(r1 + 1e-30)
-
-                        if 0.3 < order < 2.5:
-                            orders.append(order)
-
-                    except:
-                        pass
-
-    return ratios, orders
-
-def print_results_table(name, history, ratios, orders):
-    """Вывод результатов"""
-    print(f"\n[FUNC] {name}:")
-    print(f"   Итераций: {len(history)}")
-    print(f"   Финальная ошибка: {history[-1]:.2e}")
-
-    if orders:
-        avg_order = np.mean(orders[-min(3, len(orders)):])
-        print(f"   Порядок сходимости: {avg_order:.3f}")
-
-    print(f"   {'k':<3} | {'Ошибка':<14} | {'e_k/e_(k-1)':<12}")
-    print(f"   {'-' * 3} | {'-' * 14} | {'-' * 12}")
-    for i in range(min(8, len(history))):
-        err_str = f"{history[i]:.2e}"
-        ratio_str = f"{ratios[i]:.4f}" if i < len(ratios) else "—"
-        print(f"   {i + 1:<3} | {err_str:<14} | {ratio_str:<12}")
-
-# ─────────────────────────────────────────────────────────────
-# 4. Интерактивный режим
-# ─────────────────────────────────────────────────────────────
-def main():
-    while True:
-        print("\n" + "=" * 65)
-        print("  СРАВНЕНИЕ МЕТОДОВ ОДНОМЕРНОЙ ОПТИМИЗАЦИИ")
-        print("=" * 65)
-        for key, val in TEST_FUNCS.items():
-            print(f"{key}. {val['name']}")
-        print("5. Выход")
-
-        choice = input("\nВыберите функцию [1-5]: ").strip()
-        if choice == '5':
-            break
-        if choice not in TEST_FUNCS:
-            print("[WARNING]  Неверный выбор!")
-            continue
-
-        func = TEST_FUNCS[choice]
-        print(f"\n[OK] Выбрано: {func['name']}")
-        print(f"[TARGET] Точный минимум: x* = {func['x_true']:.10f}")
-        print(f"[INFO] Интервал: {func['interval']}")
-
-        try:
-            print("\n[PROCESS] Запуск методов...")
-            res_bis = bisection_method(
-                func['f'],
-                *func['interval'],
-                func['x_true']
-            )
-
-            res_sec = secant_method(
-                func['fp'],
-                func['interval'][0],
-                func['interval'][1],
-                func['x_true']
-            )
-
-            hist_bis = res_bis["history"]
-            hist_sec = res_sec["history"]
-        except Exception as e:
-            print(f"[ERROR] Ошибка: {e}")
-            continue
-
-        rat_bis, ord_bis = analyze_convergence(hist_bis)
-        rat_sec, ord_sec = analyze_convergence(hist_sec)
-
-        print("\n[RESULT] Бисекция")
-        print(f"  Итераций: {res_bis['iterations']}")
-        print(f"  Найденный минимум x = {res_bis['final_x']:.12f}")
-        print(f"  Финальная ошибка: {res_bis['final_error']:.2e}")
-        print(f"  Причина остановки: {res_bis['stop_reason']}")
-
-        print("\n[RESULT] Метод секущих")
-        print(f"  Итераций: {res_sec['iterations']}")
-        print(f"  Найденный минимум x = {res_sec['final_x']:.12f}")
-        print(f"  Финальная ошибка: {res_sec['final_error']:.2e}")
-        print(f"  Причина остановки: {res_sec['stop_reason']}")
-
-        print(f"\n{'=' * 65}")
-        print(f"{'РЕЗУЛЬТАТЫ':^65}")
-        print(f"{'=' * 65}")
-        print(f"{'Метод':<30} | {'Итераций':<10} | {'Ошибка':<12}")
-        print(f"{'-' * 65}")
-        print(f"{'Бисекция':<30} | {len(hist_bis):<10} | {hist_bis[-1]:.2e}")
-        print(f"{'Метод секущих':<30} | {len(hist_sec):<10} | {hist_sec[-1]:.2e}")
-
-        print_results_table("Бисекция", hist_bis, rat_bis, ord_bis)
-        print_results_table("Метод секущих", hist_sec, rat_sec, ord_sec)
-
-        # Визуализация
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-
-        # График сходимости
-        ax1.semilogy(range(len(hist_bis)), hist_bis, 'bo-', label='Бисекция',
-                     markersize=5, linewidth=1.5, alpha=0.8)
-        ax1.semilogy(range(len(hist_sec)), hist_sec, 'rs-', label='Секущие',
-                     markersize=5, linewidth=1.5, alpha=0.8)
-        ax1.axhline(1e-12, color='gray', linestyle=':', alpha=0.5, label='Точность 1e-12')
-        ax1.set_xlabel('Номер итерации k', fontsize=11)
-        ax1.set_ylabel('Ошибка |x_k - x*| (лог)', fontsize=11)
-        ax1.set_title('Сходимость методов', fontsize=12, fontweight='bold')
-        ax1.grid(True, which='both', alpha=0.3)
-        ax1.legend()
-
-        # График скорости
-        if rat_bis:
-            ax2.plot(range(1, len(rat_bis) + 1), rat_bis, 'bo-', label='Бисекция',
-                     markersize=5, linewidth=1.5, alpha=0.8)
-        if rat_sec:
-            ax2.plot(range(1, len(rat_sec) + 1), rat_sec, 'rs-', label='Секущие',
-                     markersize=5, linewidth=1.5, alpha=0.8)
-        ax2.axhline(0.5, color='red', linestyle=':', linewidth=1.5, label='Линейная (0.5)')
-        ax2.set_xlabel('Номер итерации k', fontsize=11)
-        ax2.set_ylabel('Коэффициент e_k / e_(k-1)', fontsize=11)
-        ax2.set_title('Скорость сходимости по шагам', fontsize=12, fontweight='bold')
-        ax2.grid(True, alpha=0.3)
-        ax2.legend()
-        ax2.set_ylim(-0.1, max(2.0, max(rat_bis + rat_sec) * 1.2) if (rat_bis and rat_sec) else 2.0)
-
-        plt.tight_layout()
-        plt.show()
-
-        if input("\n[PROCESS] Продолжить? (y/n): ").strip().lower() != 'y':
-            break
-
-if __name__ == "__main__":
-    main()
+from deap import base, creator, gp, tools, algorithms
+
+from primitives import pset_long, pset_short, pset_meta
+from signals import evalLongTrading, evalShortTrading, evalMetaTrading, plot_signals
+
+
+# =====================================================================
+# DEAP TOOLBOX
+# =====================================================================
+
+# creator.create регистрирует классы ГЛОБАЛЬНО в модуле deap.creator.
+# Повторный вызов (повторный импорт в дочернем процессе, переиспользование
+# в одном процессе) кидает RuntimeWarning/ошибку. Создаём идемпотентно —
+# только если класс ещё не зарегистрирован.
+def _safe_create(name, *args, **kwargs):
+    if not hasattr(creator, name):
+        creator.create(name, *args, **kwargs)
+
+_safe_create("FitnessMax", base.Fitness, weights=(1.0,))
+_safe_create("LongIndividual", gp.PrimitiveTree, fitness=creator.FitnessMax)
+_safe_create("ShortIndividual", gp.PrimitiveTree, fitness=creator.FitnessMax)
+_safe_create("MetaIndividual", gp.PrimitiveTree, fitness=creator.FitnessMax)
+
+toolbox_long = base.Toolbox()
+toolbox_long.register("expr", gp.genHalfAndHalf, pset=pset_long, min_=1, max_=4)
+toolbox_long.register("individual", tools.initIterate, creator.LongIndividual, toolbox_long.expr)
+toolbox_long.register("population", tools.initRepeat, list, toolbox_long.individual)
+toolbox_long.register("select", tools.selTournament, tournsize=3)
+toolbox_long.register("expr_mut", gp.genFull, min_=0, max_=2)
+toolbox_long.register("mutate", gp.mutUniform, expr=toolbox_long.expr_mut, pset=pset_long)
+
+toolbox_short = base.Toolbox()
+toolbox_short.register("expr", gp.genHalfAndHalf, pset=pset_short, min_=1, max_=4)
+toolbox_short.register("individual", tools.initIterate, creator.ShortIndividual, toolbox_short.expr)
+toolbox_short.register("population", tools.initRepeat, list, toolbox_short.individual)
+toolbox_short.register("select", tools.selTournament, tournsize=3)
+toolbox_short.register("expr_mut", gp.genFull, min_=0, max_=2)
+toolbox_short.register("mutate", gp.mutUniform, expr=toolbox_short.expr_mut, pset=pset_short)
+
+toolbox_meta = base.Toolbox()
+toolbox_meta.register("expr", gp.genHalfAndHalf, pset=pset_meta, min_=1, max_=3)
+toolbox_meta.register("individual", tools.initIterate, creator.MetaIndividual, toolbox_meta.expr)
+toolbox_meta.register("population", tools.initRepeat, list, toolbox_meta.individual)
+toolbox_meta.register("select", tools.selTournament, tournsize=3)
+toolbox_meta.register("expr_mut", gp.genFull, min_=0, max_=2)
+toolbox_meta.register("mutate", gp.mutUniform, expr=toolbox_meta.expr_mut, pset=pset_meta)
+
+
+def cx_type_safe_size_fair(ind1, ind2, max_delta=2):
+    if len(ind1) < 2 or len(ind2) < 2:
+        return ind1, ind2
+    idx1 = random.randrange(len(ind1))
+    slice1 = ind1.searchSubtree(idx1)
+    size1 = slice1.stop - slice1.start
+    type1 = ind1[idx1].ret
+
+    candidates = []
+    for idx2 in range(len(ind2)):
+        if ind2[idx2].ret == type1:
+            slice2 = ind2.searchSubtree(idx2)
+            size2 = slice2.stop - slice2.start
+            if abs(size1 - size2) <= max_delta:
+                candidates.append((idx2, slice2))
+    if not candidates:
+        return ind1, ind2
+    idx2, slice2 = random.choice(candidates)
+    ind1[slice1], ind2[slice2] = ind2[slice2], ind1[slice1]
+    return ind1, ind2
+
+
+toolbox_long.register("mate", cx_type_safe_size_fair, max_delta=2)
+toolbox_short.register("mate", cx_type_safe_size_fair, max_delta=2)
+toolbox_meta.register("mate", cx_type_safe_size_fair, max_delta=2)
+
+for tb in [toolbox_long, toolbox_short, toolbox_meta]:
+    tb.decorate("mutate", gp.staticLimit(key=lambda ind: ind.height, max_value=6))
+    tb.decorate("mate", gp.staticLimit(key=lambda ind: ind.height, max_value=6))
+
+
+# =====================================================================
+# EVOLUTION
+# =====================================================================
+
+def evolve_one_gen(pop, toolbox, hof, mu=100, lambda_=150, cxpb=0.6, mutpb=0.3):
+    """
+    Один шаг (μ+λ) эволюции:
+    - Генерим lambda_ потомков через кроссовер и мутацию
+    - Объединяем родителей + потомков
+    - Отбираем mu лучших
+    Лучшие ВСЕГДА выживают — нет деградации.
+    """
+    offspring = algorithms.varOr(pop, toolbox, lambda_=lambda_, cxpb=cxpb, mutpb=mutpb)
+
+    invalid = [ind for ind in offspring if not ind.fitness.valid]
+    fitnesses = list(map(toolbox.evaluate, invalid))
+    for ind, fit in zip(invalid, fitnesses):
+        ind.fitness.values = fit
+
+    combined = pop + offspring
+    pop[:] = tools.selBest(combined, mu)
+
+    hof.update(pop)
+    return pop
+
+
+def evolve(bars, ndf, seed=None, pop_size=250, offspring=320, ngen=25,
+           do_plot=True):
+    """
+    Коэволюция трёх популяций на наборе баров `bars`.
+    `ndf` используется только для финальной визуализации plot_signals.
+    Возвращает ((pop_long, pop_short, pop_meta), (hof_long, hof_short, hof_meta)).
+    """
+    if seed is None:
+        seed = int(datetime.now().timestamp() * 1000) % (2**31)
+    random.seed(seed)
+    print(f"Random seed: {seed}  (передай в evolve(seed={seed}) чтобы воспроизвести)")
+
+    pop_long = toolbox_long.population(n=pop_size)
+    pop_short = toolbox_short.population(n=pop_size)
+    pop_meta = toolbox_meta.population(n=pop_size)
+
+    hof_long = tools.HallOfFame(5)
+    hof_short = tools.HallOfFame(5)
+    hof_meta = tools.HallOfFame(5)
+
+    toolbox_long.register("evaluate", evalLongTrading, bars=bars)
+    toolbox_short.register("evaluate", evalShortTrading, bars=bars)
+
+    for pop, tb in [(pop_long, toolbox_long), (pop_short, toolbox_short)]:
+        fitnesses = list(map(tb.evaluate, pop))
+        for ind, fit in zip(pop, fitnesses):
+            ind.fitness.values = fit
+
+    hof_long.update(pop_long)
+    hof_short.update(pop_short)
+
+    print("=" * 60)
+    print("Starting co-evolution with three populations (μ+λ)")
+    print(f"Bars: {len(bars)}, Pop: {pop_size}, Offspring: {offspring}, Gen: {ngen}")
+    print("Signal logic: true = position open, false = position closed")
+    print("=" * 60)
+
+    prev_target = None  # (str(best_long), str(best_short)) предыдущего поколения
+    for gen in range(ngen):
+        print(f"\n--- Generation {gen + 1}/{ngen} ---")
+
+        pop_long = evolve_one_gen(pop_long, toolbox_long, hof_long,
+                                  mu=pop_size, lambda_=offspring)
+
+        pop_short = evolve_one_gen(pop_short, toolbox_short, hof_short,
+                                   mu=pop_size, lambda_=offspring)
+
+        best_long_func = gp.compile(hof_long[0], pset_long)
+        best_short_func = gp.compile(hof_short[0], pset_short)
+
+        toolbox_meta.register("evaluate", evalMetaTrading,
+                              bars=bars,
+                              best_long_func=best_long_func,
+                              best_short_func=best_short_func)
+
+        # Meta оценивается ПРОТИВ текущих лучших long/short. Когда они
+        # меняются, фитнес ранее оценённых meta-особей устаревает: selBest
+        # начинает сравнивать несопоставимые числа (мишень «уплыла»).
+        # Поэтому при смене мишени инвалидируем ВЕСЬ pop_meta (пересчёт
+        # против новой мишени) и пересоздаём hof_meta (старые записи мерились
+        # против устаревшей мишени).
+        cur_target = (str(hof_long[0]), str(hof_short[0]))
+        if gen == 0 or cur_target != prev_target:
+            for ind in pop_meta:
+                if ind.fitness.valid:
+                    del ind.fitness.values
+            hof_meta = tools.HallOfFame(5)
+            fitnesses = list(map(toolbox_meta.evaluate, pop_meta))
+            for ind, fit in zip(pop_meta, fitnesses):
+                ind.fitness.values = fit
+            hof_meta.update(pop_meta)
+        prev_target = cur_target
+
+        pop_meta = evolve_one_gen(pop_meta, toolbox_meta, hof_meta,
+                                  mu=pop_size, lambda_=offspring)
+
+        long_fit = [ind.fitness.values[0] for ind in pop_long]
+        short_fit = [ind.fitness.values[0] for ind in pop_short]
+        meta_fit = [ind.fitness.values[0] for ind in pop_meta]
+
+        print(f"  Long  — max: {max(long_fit):8.2f}%, avg: {np.mean(long_fit):8.2f}%")
+        print(f"  Short — max: {max(short_fit):8.2f}%, avg: {np.mean(short_fit):8.2f}%")
+        print(f"  Meta  — max: {max(meta_fit):8.2f}%, avg: {np.mean(meta_fit):8.2f}%")
+
+    print("\n" + "=" * 60)
+    print("FINAL RESULTS")
+    print("=" * 60)
+    print(f"Best Long fitness:  {hof_long[0].fitness.values[0]:.2f}%")
+    print(f"Best Long:  {str(hof_long[0])}")
+    print(f"\nBest Short fitness: {hof_short[0].fitness.values[0]:.2f}%")
+    print(f"Best Short: {str(hof_short[0])}")
+    print(f"\nBest Meta fitness:  {hof_meta[0].fitness.values[0]:.2f}%")
+    print(f"Best Meta:  {str(hof_meta[0])}")
+
+    if do_plot:
+        plot_signals(ndf, bars, hof_long[0], hof_short[0], hof_meta[0],
+                     pset_long, pset_short, pset_meta,
+                     title_prefix="[TRAIN] ")
+
+    return (pop_long, pop_short, pop_meta), (hof_long, hof_short, hof_meta)
