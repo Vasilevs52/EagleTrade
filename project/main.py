@@ -108,15 +108,21 @@ def run_parallel_evolution(n_processes: int = 1):
     for p in processes:
         p.start()
 
-    for p in processes:
-        p.join()
-
-    # Собираем результаты
+    # ВАЖНО: читаем очередь ДО join().
+    # Каждый процесс кладёт в result_queue крупный объект (hofs — пиклённые
+    # деревья DEAP). Очередь идёт через pipe с ограниченным буфером: при
+    # большом объекте queue.put() блокируется, пока родитель не начнёт читать.
+    # Если сначала делать join(), родитель ждёт завершения процесса, а тот
+    # не может завершиться, пока не дописал в очередь -> взаимная блокировка.
+    # Поэтому забираем ровно по одному результату на процесс, ПОТОМ join().
     all_results = []
-    while not result_queue.empty():
-        r = result_queue.get()
+    for _ in processes:
+        r = result_queue.get()   # блокирующий get освобождает буфер очереди
         if r is not None:
             all_results.append(r)
+
+    for p in processes:
+        p.join()
 
     if not all_results:
         raise RuntimeError("Все процессы упали, результатов нет!")

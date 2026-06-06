@@ -335,10 +335,15 @@ def cross_below(a, b):
 # =====================================================================
 
 def _clamp_period(vec, period):
-    """Приводит период к целому в диапазоне [2, len(vec)]."""
+    """Приводит период к целому в диапазоне [2, len(vec)].
+    Безопасно к NaN/inf: дерево может подать в период не-конечное значение
+    (scalar_div на ~0, scalar_exp и т.п.). Без этой защиты int(NaN)/int(inf)
+    кидают ValueError/OverflowError в горячем цикле эволюции."""
     n = len(vec)
     if n < 2:
         return n
+    if not math.isfinite(period):   # NaN, +inf, -inf
+        return n                     # деградируем к полному окну
     p = int(abs(period))
     if p < 2:
         p = 2
