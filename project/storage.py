@@ -47,8 +47,9 @@ def save_results(all_results, filename=RESULTS_FILE, append=True):
         except (json.JSONDecodeError, OSError):
             records = []
 
+    new_records = []
     for r in all_results:
-        records.append({
+        new_records.append({
             "seed":           r.get("seed"),
             "fitness":        r.get("fitness"),
             "best_long_str":  r.get("best_long_str"),
@@ -58,6 +59,18 @@ def save_results(all_results, filename=RESULTS_FILE, append=True):
             "best_short_fit": r.get("best_short_fit"),
             "best_meta_fit":  r.get("best_meta_fit"),
         })
+
+    # Дедупликация по seed: новый прогон с тем же seed ЗАМЕНЯЕТ старую запись
+    # (раньше append копил дубли — один seed дважды давал 2 одинаковые записи,
+    # файл рос бесконечно). Идентичность стратегии определяется seed + текстом
+    # деревьев; для надёжности ключ — (seed, best_meta_str).
+    def _key(rec):
+        return (rec.get("seed"), rec.get("best_meta_str"))
+
+    merged = {}
+    for rec in records + new_records:   # new_records позже -> перезаписывают
+        merged[_key(rec)] = rec
+    records = list(merged.values())
 
     # Сортируем по итоговому фитнесу (лучшие сверху)
     records.sort(key=lambda x: (x.get("fitness") is not None, x.get("fitness", float("-inf"))),

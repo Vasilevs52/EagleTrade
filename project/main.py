@@ -82,7 +82,11 @@ def _run_evolution_process(seed: int, result_queue: mp.Queue):
         })
         print(f"[seed={seed}] Process finished. Meta fitness = {fitness:.2f}%")
     except Exception as exc:
+        # Печатаем ПОЛНЫЙ traceback: иначе при падении всех процессов
+        # пользователь видит только "Все процессы упали" без причины.
+        import traceback
         print(f"[seed={seed}] Process ERROR: {exc}")
+        traceback.print_exc()
         result_queue.put(None)
 
 
@@ -129,7 +133,10 @@ def run_parallel_evolution(n_processes: int = 1):
         p.join()
 
     if not all_results:
-        raise RuntimeError("Все процессы упали, результатов нет!")
+        raise RuntimeError(
+            "Все процессы упали, результатов нет! "
+            "Смотрите traceback каждого процесса выше (Process ERROR)."
+        )
 
     best = max(all_results, key=lambda r: r["fitness"])
 
