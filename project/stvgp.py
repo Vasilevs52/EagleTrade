@@ -10,7 +10,10 @@ import numpy as np
 from deap import base, creator, gp, tools, algorithms
 
 from primitives import pset_long, pset_short, pset_meta
-from signals import evalLongTrading, evalShortTrading, evalMetaTrading, plot_signals
+from signals import (
+    evalLongTrading, evalShortTrading, evalMetaTrading,
+    precompute_active, plot_signals,
+)
 
 
 # =====================================================================
@@ -112,7 +115,7 @@ def evolve_one_gen(pop, toolbox, hof, mu=100, lambda_=150, cxpb=0.6, mutpb=0.3):
     return pop
 
 
-def evolve(bars, ndf, seed=None, pop_size=250, offspring=320, ngen=25,
+def evolve(bars, ndf, seed=None, pop_size=25, offspring=32, ngen=10,
            do_plot=True):
     """
     Коэволюция трёх популяций на наборе баров `bars`.
@@ -162,10 +165,15 @@ def evolve(bars, ndf, seed=None, pop_size=250, offspring=320, ngen=25,
         best_long_func = gp.compile(hof_long[0], pset_long)
         best_short_func = gp.compile(hof_short[0], pset_short)
 
+        # Предпосчитываем сигналы long/short по всем барам ОДИН раз за
+        # поколение — meta-особи (сотни) больше не гоняют эти деревья каждая.
+        la, sa = precompute_active(bars, best_long_func, best_short_func)
+
         toolbox_meta.register("evaluate", evalMetaTrading,
                               bars=bars,
                               best_long_func=best_long_func,
-                              best_short_func=best_short_func)
+                              best_short_func=best_short_func,
+                              long_active=la, short_active=sa)
 
         # Meta оценивается ПРОТИВ текущих лучших long/short. Когда они
         # меняются, фитнес ранее оценённых meta-особей устаревает: selBest

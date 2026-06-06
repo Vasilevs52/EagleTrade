@@ -2,6 +2,7 @@
 # MAIN — точка входа: загрузка данных, параллельная эволюция, валидация
 # =====================================================================
 
+import os
 import random
 import multiprocessing as mp
 
@@ -55,7 +56,10 @@ bars = [b for chunk in _train_bars for b in chunk]
 ndf = _train_dfs[0]  # для plot_signals на тренировочных (берём первый кусок)
 print(f"  Total: {len(bars)} bars")
 
-NUM_THREADS = 1   # теперь это процессы
+# Число параллельных процессов эволюции. По умолчанию = число ядер CPU
+# (каждый процесс гоняет независимую эволюцию со своим seed, в конце
+# выбирается лучший). Можно переопределить переменной окружения EAGLE_PROCS.
+NUM_THREADS = int(os.environ.get("EAGLE_PROCS", os.cpu_count() or 1))
 
 
 def _run_evolution_process(seed: int, result_queue: mp.Queue):

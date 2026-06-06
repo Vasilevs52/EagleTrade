@@ -209,6 +209,33 @@ def decide_position(bar, long_func, short_func, meta_func):
     return desired, long_active, short_active, meta_sig
 
 
+def precompute_active(bars, long_func, short_func):
+    """
+    Предпосчёт булевых сигналов long/short по всем барам ОДИН раз.
+    Возвращает (long_active[], short_active[]) — списки 0.0/1.0.
+
+    Оптимизация: в пределах поколения long/short деревья фиксированы, а
+    evalMetaTrading вызывается для сотен meta-особей. Раньше каждая из них
+    заново гоняла оба дерева по всем барам — это дублирование O(meta*bars).
+    Теперь long/short считаются один раз, meta-eval работает по готовым
+    массивам.
+    """
+    long_active = [0.0] * len(bars)
+    short_active = [0.0] * len(bars)
+    for i, b in enumerate(bars):
+        try:
+            if long_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"]) > 0:
+                long_active[i] = 1.0
+        except Exception:
+            pass
+        try:
+            if short_func(b["price"], b["sma"], b["ema"], b["lwma"], b["cur"]) > 0:
+                short_active[i] = 1.0
+        except Exception:
+            pass
+    return long_active, short_active
+
+
 # =====================================================================
 # FITNESS FUNCTIONS
 # Новая логика:
@@ -305,7 +332,8 @@ def evalShortTrading(ind, bars):
     return (total_pct,)
 
 
-def evalMetaTrading(ind, bars, best_long_func, best_short_func):
+def evalMetaTrading(ind, bars, best_long_func, best_short_func,
+                    long_active=None, short_active=None):
     """
     Фитнес Meta популяции.
     Получает 2 булевых сигнала: long_active и short_active.
@@ -314,8 +342,16 @@ def evalMetaTrading(ind, bars, best_long_func, best_short_func):
       < -0.5 -> SHORT
       иначе  -> FLAT
     Профит в процентах с комиссией и short_cost.
+
+    long_active/short_active — предпосчитанные массивы (precompute_active).
+    Если не переданы — считаются здесь (обратная совместимость). В эволюции
+    передаются готовыми, чтобы не гонять long/short деревья для каждой особи.
     """
     meta_func = gp.compile(ind, pset_meta)
+
+    if long_active is None or short_active is None:
+        long_active, short_active = precompute_active(
+            bars, best_long_func, best_short_func)
 
     total_pct = 0.0
     commission = COMMISSION
@@ -325,8 +361,17 @@ def evalMetaTrading(ind, bars, best_long_func, best_short_func):
     bars_held = 0
     trades_count = 0
 
-    for b in bars:
-        desired, _, _, _ = decide_position(b, best_long_func, best_short_func, meta_func)
+    for i, b in enumerate(bars):
+        try:
+            meta_sig = meta_func(long_active[i], short_active[i])
+            if meta_sig > LONG_THRESHOLD:
+                desired = 1
+            elif meta_sig < SHORT_THRESHOLD:
+                desired = -1
+            else:
+                desired = 0
+        except Exception:
+            desired = 0
 
         if position != desired:
             # Закрываем текущую

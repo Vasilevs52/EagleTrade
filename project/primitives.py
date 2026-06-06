@@ -79,10 +79,11 @@ def scalar_mean(a):
     return sum(a) / len(a) if len(a) > 0 else 0.0
 
 def scalar_std(a):
-    if len(a) <= 1:
+    n = len(a)
+    if n <= 1:
         return 0.0
-    mean = sum(a) / len(a)
-    return math.sqrt(sum((x - mean) ** 2 for x in a) / len(a))
+    mean = sum(a) / n
+    return math.sqrt(sum([(x - mean) * (x - mean) for x in a]) / n)
 
 def vec_max_elem(a):
     return max(a) if len(a) > 0 else 0.0
@@ -97,7 +98,7 @@ def vec_dot(a, b):
     return sum(x * y for x, y in zip(a, b))
 
 def vec_norm(a):
-    return math.sqrt(sum(x * x for x in a))
+    return math.sqrt(sum([x * x for x in a]))
 
 def sum_gt(a, b):
     return 1.0 if sum(a) > sum(b) else 0.0
@@ -258,15 +259,18 @@ def vec_median(a):
     return s[mid] if n % 2 == 1 else (s[mid - 1] + s[mid]) / 2.0
 
 def vec_slope(a):
-    """Наклон линейного тренда (МНК) по окну."""
+    """Наклон линейного тренда (МНК) по окну. Один проход вместо генераторов."""
     n = len(a)
     if n < 2:
         return 0.0
-    xs = range(n)
     mx = (n - 1) / 2.0
     my = sum(a) / n
-    num = sum((x - mx) * (a[x] - my) for x in xs)
-    den = sum((x - mx) ** 2 for x in xs)
+    num = 0.0
+    den = 0.0
+    for x in range(n):
+        dx = x - mx
+        num += dx * (a[x] - my)
+        den += dx * dx
     return num / den if den > 1e-10 else 0.0
 
 def vec_zscore(a):
@@ -275,7 +279,7 @@ def vec_zscore(a):
     if n < 2:
         return 0.0
     mean = sum(a) / n
-    std = math.sqrt(sum((x - mean) ** 2 for x in a) / n)
+    std = math.sqrt(sum([(x - mean) * (x - mean) for x in a]) / n)
     return (a[-1] - mean) / std if std > 1e-10 else 0.0
 
 def vec_ema_last(a):
@@ -386,8 +390,8 @@ def stddev_n(vec, period):
         return 0.0
     p = _clamp_period(vec, period)
     window = vec[-p:]
-    mean = sum(window) / len(window)
-    return math.sqrt(sum((x - mean) ** 2 for x in window) / len(window))
+    m = sum(window) / len(window)
+    return math.sqrt(sum([(x - m) * (x - m) for x in window]) / len(window))
 
 def macd_n(vec):
     """MACD-линия: EMA(быстрый) - EMA(медленный) по всему окну.
@@ -406,7 +410,7 @@ def bollinger_pctb(vec, period):
     p = _clamp_period(vec, period)
     window = vec[-p:]
     mean = sum(window) / len(window)
-    std = math.sqrt(sum((x - mean) ** 2 for x in window) / len(window))
+    std = math.sqrt(sum([(x - mean) * (x - mean) for x in window]) / len(window))
     upper = mean + 2 * std
     lower = mean - 2 * std
     if upper - lower < 1e-10:
