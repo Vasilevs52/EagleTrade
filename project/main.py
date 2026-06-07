@@ -23,6 +23,7 @@ from signals import (
 from stvgp import evolve
 from storage import (
     save_results,
+    append_result_locked,
     load_best_hofs,
     load_records,
     record_to_hofs,
@@ -68,7 +69,7 @@ def _run_evolution_process(seed: int, result_queue: mp.Queue):
         # В дочернем процессе не строим графики (нет GUI / окна не нужны).
         pops, hofs = evolve(bars, ndf, seed=seed, do_plot=False)
         fitness = hofs[2][0].fitness.values[0]
-        result_queue.put({
+        result = {
             "seed":    seed,
             "fitness": fitness,
             "best_long_str":  str(hofs[0][0]),
@@ -79,7 +80,15 @@ def _run_evolution_process(seed: int, result_queue: mp.Queue):
             "best_meta_fit":  hofs[2][0].fitness.values[0],
             # hofs сериализуются через pickle (DEAP PrimitiveTree поддерживает)
             "hofs": hofs,
-        })
+        }
+        # Сохраняем СРАЗУ по завершении процесса (под файловой блокировкой),
+        # а не все скопом в конце: при долгом прогоне (ngen=300 x N процессов)
+        # упавший/прерванный прогон не теряет уже готовые стратегии.
+        try:
+            append_result_locked(result, filename=RESULTS_FILE)
+        except Exception as save_exc:
+            print(f"[seed={seed}] WARN: не удалось сохранить инкрементально: {save_exc}")
+        result_queue.put(result)
         print(f"[seed={seed}] Process finished. Meta fitness = {fitness:.2f}%")
     except Exception as exc:
         # Печатаем ПОЛНЫЙ traceback: иначе при падении всех процессов
@@ -148,8 +157,8 @@ def run_parallel_evolution(n_processes: int = 1):
         print(f"  seed={r['seed']:12d}  Meta fitness={r['fitness']:8.2f}%{marker}")
     print("=" * 70)
 
-    # Сохраняем КАЖДОГО лучшего индивида (по одному с каждого процесса) в файл.
-    save_results(all_results, filename=RESULTS_FILE, append=True)
+    # Результаты уже сохранены инкрементально каждым процессом по завершении
+    # (append_result_locked в _run_evolution_process) — финальный save не нужен.
 
     return best
 

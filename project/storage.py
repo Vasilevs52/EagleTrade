@@ -8,6 +8,7 @@ import json
 import os
 
 from deap import gp, creator
+from filelock import FileLock
 
 # Импорт stvgp создаёт классы creator.LongIndividual / ShortIndividual /
 # MetaIndividual (с прикреплённым fitness) и наборы примитивов.
@@ -15,6 +16,60 @@ import stvgp  # noqa: F401  (нужен ради побочного эффект
 from primitives import pset_long, pset_short, pset_meta
 
 RESULTS_FILE = "evolution_results.json"
+
+
+def _record_from_result(r):
+    """Извлекает сохраняемые поля из результата одного прогона."""
+    return {
+        "seed":           r.get("seed"),
+        "fitness":        r.get("fitness"),
+        "best_long_str":  r.get("best_long_str"),
+        "best_short_str": r.get("best_short_str"),
+        "best_meta_str":  r.get("best_meta_str"),
+        "best_long_fit":  r.get("best_long_fit"),
+        "best_short_fit": r.get("best_short_fit"),
+        "best_meta_fit":  r.get("best_meta_fit"),
+    }
+
+
+def append_result_locked(result, filename=RESULTS_FILE):
+    """
+    Потокобезопасно ДОПИСЫВАЕТ один результат в JSON под файловой блокировкой.
+
+    Зачем: при долгом параллельном прогоне (N процессов x ngen поколений)
+    каждый процесс сохраняет свой результат СРАЗУ по завершении, а не все
+    скопом в конце. Если сервер/SSH/процесс упадёт — уже готовые стратегии
+    не теряются.
+
+    FileLock сериализует доступ: 16 процессов не перезапишут файл друг друга.
+    Дедуп по (seed, best_meta_str) — повтор не плодит дубли.
+    """
+    rec = _record_from_result(result)
+    lock = FileLock(filename + ".lock")
+    with lock:
+        records = []
+        if os.path.exists(filename):
+            try:
+                with open(filename, "r", encoding="utf-8") as f:
+                    records = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                records = []
+
+        # Дедуп по (seed, best_meta_str): новая запись заменяет старую.
+        merged = {(r.get("seed"), r.get("best_meta_str")): r for r in records}
+        merged[(rec.get("seed"), rec.get("best_meta_str"))] = rec
+        records = list(merged.values())
+        records.sort(
+            key=lambda x: (x.get("fitness") is not None, x.get("fitness", float("-inf"))),
+            reverse=True)
+
+        # Атомарная запись: пишем во временный файл, потом заменяем — чтобы
+        # при сбое в момент записи не осталось «обрезанного» JSON.
+        tmp = filename + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(records, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, filename)
+    return filename
 
 
 # ---------------------------------------------------------------------
@@ -47,18 +102,7 @@ def save_results(all_results, filename=RESULTS_FILE, append=True):
         except (json.JSONDecodeError, OSError):
             records = []
 
-    new_records = []
-    for r in all_results:
-        new_records.append({
-            "seed":           r.get("seed"),
-            "fitness":        r.get("fitness"),
-            "best_long_str":  r.get("best_long_str"),
-            "best_short_str": r.get("best_short_str"),
-            "best_meta_str":  r.get("best_meta_str"),
-            "best_long_fit":  r.get("best_long_fit"),
-            "best_short_fit": r.get("best_short_fit"),
-            "best_meta_fit":  r.get("best_meta_fit"),
-        })
+    new_records = [_record_from_result(r) for r in all_results]
 
     # Дедупликация по seed: новый прогон с тем же seed ЗАМЕНЯЕТ старую запись
     # (раньше append копил дубли — один seed дважды давал 2 одинаковые записи,
