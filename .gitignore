@@ -10,15 +10,15 @@ venv/
 # Артефакты запусков EagleTrade
 project/run_out.txt
 project/results/
+project/stvgp/results/
 # Временные файлы инкрементального сохранения (filelock)
-project/evolution_results.json.lock
-project/evolution_results.json.tmp
 *.lock
+*.tmp
 # evolution_results.json НЕ игнорируем — это результат эволюции,
 # версионируем его, чтобы переносить между машинами через git pull/push.
 
 # Сгенерированные графики (создаются кодом при каждом прогоне)
-project/backtest_result.png
-project/equity_bull_feb2024.png
-project/equity_bear_may2023.png
-project/summary_bars.png
+backtest_result.png
+equity_bull_feb2024.png
+equity_bear_may2023.png
+summary_bars.png
