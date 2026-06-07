@@ -1,1 +1,362 @@
-[]
+[
+  {
+    "seed": 654853656,
+    "fitness": 117.45125134806206,
+    "best_long_str": "vec_dot(vec_add(if_else(protected_div(bollinger_pctb(wma_series(IN2, 6.0), 28.0), rnd_mean_gt(wma_series(IN1, 15.0), IN4, vec_max_elem(IN0))), wma_series(IN2, -0.42106079924358175), IN0), vec_sub(vec_sqrt(vec_add(IN1, IN3)), ema_series(sma_series(IN1, vec_mean_diff(IN1, IN0)), vec_slope(wma_series(IN2, 6.0))))), vec_add_s(vec_sub(wma_series(wma_series(IN2, vec_zscore(IN0)), vec_zscore(vec_sqrt(IN1))), IN2), macd_n(vec_add(wma_series(IN2, -0.42106079924358175), IN3))))",
+    "best_short_str": "scalar_sub(scalar_sub(IN4, sma_n(if_else(vec_rsi(IN3), ema_series(if_else(0.002003289044791412, IN2, IN3), 20.0), vec_mul_s(vec_sub_s(IN3, IN4), IN4)), vec_momentum(ema_series(IN0, vec_momentum(IN0))))), vec_min_elem(vec_div_s(IN0, macd_n(vec_sub_s(IN3, -0.04751652079132329)))))",
+    "best_meta_str": "scalar_sub(scalar_if_else(bool_if_then_else(bool_not(SIG1), scalar_add(SIG0, SIG1), bool_not(1.3145763277350984)), scalar_if_else(SIG1, -0.9802448295964101, 1.9281209849812386), meta_neg(SIG1)), scalar_mul(scalar_sign(bool_xor(meta_neg(-0.13409624473467563), scalar_add(SIG1, 1.9127519355614018))), bool_or(SIG0, 0.8781882809430268)))",
+    "best_long_fit": 29.50368636284952,
+    "best_short_fit": 60.181512027755424,
+    "best_meta_fit": 117.45125134806206
+  },
+  {
+    "seed": 734413041,
+    "fitness": 114.54882051410482,
+    "best_long_str": "scalar_gte(macd_n(vec_add(wma_series(ema_series(IN1, macd_n(IN2)), scalar_mul(25.0, -0.3323145744433089)), wma_series(vec_abs(vec_sub_s(IN0, IN4)), 33.0))), scalar_if_else(macd_n(vec_div_s(wma_series(vec_sub_s(IN0, IN4), 25.0), scalar_pow2(scalar_mul(25.0, -0.3323145744433089)))), scalar_mul(-0.9872730943341734, 22.0), scalar_if_else(scalar_clip01(macd_n(IN3)), scalar_mul(scalar_sub(macd_n(IN3), 22.0), scalar_cos(scalar_if_else(0.6643658137067592, 0.26244134232618666, 0.5261747235634946))), vec_min_elem(vec_abs(vec_sub_s(IN2, IN4))))))",
+    "best_short_str": "scalar_mul(bollinger_pctb(wma_series(vec_sqrt(IN3), IN4), scalar_if_else(sma_n(vec_sub(vec_add_s(IN2, 50.0), IN3), first_elem(sma_series(IN1, -0.28148249498348554))), stddev_n(IN0, 25.0), vec_range(vec_mul_s(IN2, -0.04631321798361432)))), scalar_if_else(macd_n(vec_mul(ema_series(IN1, 0.4804883153731372), vec_sub(ema_series(IN1, 0.4804883153731372), IN3))), macd_n(vec_neg(vec_mul(sma_series(IN0, IN4), vec_add(IN2, IN1)))), vec_dot(sma_series(vec_mul_s(IN1, 37.0), 50.0), vec_sub(if_else(mean_gt(IN0, IN4), vec_sub(IN2, IN3), if_else(17.0, IN0, IN3)), sma_series(vec_add_s(IN2, 50.0), 0.4804883153731372)))))",
+    "best_meta_str": "meta_add(scalar_sub(SIG0, SIG1), scalar_add(scalar_tanh(1.5472382503771236), meta_sub(SIG0, SIG1)))",
+    "best_long_fit": 38.481052342817996,
+    "best_short_fit": 70.91999044509056,
+    "best_meta_fit": 114.54882051410482
+  },
+  {
+    "seed": 948460939,
+    "fitness": 113.94259307744797,
+    "best_long_str": "macd_n(vec_mul_s(vec_mul(vec_log(vec_log(vec_sqrt(IN1))), vec_mul(vec_mul(IN2, IN3), vec_add_s(sma_series(IN0, IN4), IN4))), scalar_gte(34.0, macd_n(sma_series(IN0, scalar_std(IN1))))))",
+    "best_short_str": "bollinger_pctb(vec_mul(vec_sub_s(wma_series(IN3, vec_min_elem(IN0)), scalar_div(vec_zscore(IN2), protected_div(protected_div(0.2167032712855499, IN4), bollinger_pctb(IN1, 13.0)))), ema_series(vec_log(vec_mul_s(IN3, vec_momentum(IN1))), vec_momentum(vec_mul_s(sma_series(IN3, 49.0), sum_gt(IN2, IN3))))), vec_mean_diff(sma_series(IN0, scalar_relu(39.0)), vec_abs(IN1)))",
+    "best_meta_str": "meta_add(scalar_sub(scalar_if_else(SIG0, SIG0, meta_nor(SIG0, SIG1)), bool_xor(SIG1, SIG0)), meta_mul(scalar_if_else(scalar_neg(SIG0), meta_mul(SIG0, SIG1), meta_nand(-1.8323820918673275, SIG1)), SIG0))",
+    "best_long_fit": 31.460470722812197,
+    "best_short_fit": 52.02752015053358,
+    "best_meta_fit": 113.94259307744797
+  },
+  {
+    "seed": 22331430,
+    "fitness": 110.83194629647629,
+    "best_long_str": "macd_n(vec_mul(vec_mul(vec_log(vec_sub_s(vec_mul(IN0, IN1), protected_div(-0.3104487433969243, 0.5336593114405477))), vec_mul(vec_add(IN1, IN2), wma_series(IN0, stddev_n(IN2, 31.0)))), vec_mul(vec_mul(vec_mul(vec_sqrt(IN3), IN2), IN2), vec_sub_s(vec_add_s(IN3, scalar_mul(IN4, -0.3104487433969243)), scalar_exp(vec_slope(IN0))))))",
+    "best_short_str": "scalar_lte(vec_rsi(vec_div_s(vec_mul(IN1, IN2), vec_mean_diff(wma_series(IN3, 15.0), vec_sub_s(vec_sub_s(IN1, 31.0), 0.7818875817595394)))), vec_rsi(if_else(vec_mean_diff(IN2, vec_sub_s(vec_sub_s(IN1, 31.0), vec_rsi(IN3))), IN1, vec_add(vec_mul(IN3, ema_series(IN1, 8.0)), vec_mul(ema_series(IN2, 8.0), ema_series(IN1, 0.7818875817595394))))))",
+    "best_meta_str": "scalar_sub(scalar_sub(scalar_add(SIG0, 1.666520935709812), scalar_add(SIG1, SIG0)), scalar_sub(scalar_mul(bool_not(SIG0), SIG0), meta_add(scalar_add(SIG0, SIG0), meta_sub(meta_sub(SIG0, SIG1), bool_if_then_else(SIG1, SIG1, meta_nand(SIG1, SIG1))))))",
+    "best_long_fit": 29.23573009287676,
+    "best_short_fit": 69.59162569488562,
+    "best_meta_fit": 110.83194629647629
+  },
+  {
+    "seed": 322138953,
+    "fitness": 110.66415440465222,
+    "best_long_str": "scalar_if_else(macd_n(vec_add(vec_neg(vec_div_s(IN1, 0.7239831703193733)), vec_div_s(wma_series(IN2, -0.23737015239371972), 0.9107548333502073))), macd_n(vec_neg(vec_sub(vec_add_s(IN3, 29.0), vec_neg(vec_div_s(IN1, 0.58341599256548))))), scalar_if_else(macd_n(vec_add(vec_add(IN3, IN2), IN3)), macd_n(vec_add_s(IN3, 0.7150865043408967)), cross_below(if_else(sum_gt(IN0, IN2), vec_sub(IN0, IN3), if_else(vec_roc(IN1), vec_mul_s(IN0, IN4), vec_log(IN2))), vec_neg(vec_sub(IN0, IN1)))))",
+    "best_short_str": "vec_sum(if_else(sum_gt(IN2, IN1), vec_mul_s(vec_sub_s(sma_series(IN2, vec_slope(IN3)), scalar_add(0.6766183955734828, scalar_mean(IN2))), sum_gt(IN2, ema_series(vec_sub_s(IN3, -0.7737157657595257), macd_n(IN2)))), vec_sub(IN1, sma_series(vec_sub_s(IN3, -0.7737157657595257), macd_n(wma_series(IN0, 37.0))))))",
+    "best_meta_str": "meta_sub(scalar_add(SIG0, meta_sub(SIG0, meta_add(meta_nand(SIG1, -0.690449839632282), bool_if_then_else(0.14925784915487528, 1.122135253050172, SIG1)))), meta_sub(scalar_if_else(meta_nor(1.8394349576967346, SIG0), SIG1, SIG1), 0.3467893513767635))",
+    "best_long_fit": 35.13801857775215,
+    "best_short_fit": 64.9594053229243,
+    "best_meta_fit": 110.66415440465222
+  },
+  {
+    "seed": 524725300,
+    "fitness": 103.47510039132082,
+    "best_long_str": "macd_n(vec_add_s(sma_series(vec_mul(ema_series(vec_abs(IN0), rnd_mean_gt(IN1, IN4, IN4)), vec_add_s(wma_series(IN3, 36.0), vec_ema_last(IN3))), macd_n(wma_series(vec_add(IN3, IN1), scalar_cos(IN4)))), scalar_max(scalar_add(vec_zscore(IN3), IN4), scalar_add(IN4, 0.2782688338090764))))",
+    "best_short_str": "scalar_if_else(macd_n(vec_sub_s(vec_sub(vec_sub(vec_div_s(IN1, 18.0), vec_sub_s(IN2, 0.8586736059571385)), vec_sub_s(IN2, 19.0)), scalar_sign(5.0))), scalar_lt(bollinger_pctb(vec_abs(vec_sub_s(IN2, IN4)), scalar_abs(scalar_if_else(vec_mean_diff(IN2, IN3), 17.0, 18.0))), scalar_pos(vec_slope(sma_series(sma_series(IN1, 15.0), vec_norm(IN2))))), scalar_gte(vec_mean_diff(sma_series(vec_mul(vec_sub_s(IN3, IN4), vec_sqrt(IN2)), scalar_abs(scalar_if_else(17.0, 50.0, 50.0))), vec_mul_s(vec_sub(IN3, ema_series(IN2, 50.0)), vec_slope(vec_mul(IN3, IN3)))), last_elem(vec_mul_s(vec_sub(IN3, ema_series(IN2, 50.0)), vec_slope(vec_mul(IN3, IN3))))))",
+    "best_meta_str": "scalar_sub(meta_sub(meta_add(scalar_add(bool_xor(SIG0, SIG1), -0.025404598417599455), SIG0), scalar_sub(SIG1, 0.9577245504370815)), meta_mul(meta_add(SIG1, SIG1), meta_implies(bool_not(1.8216560402397461), scalar_add(SIG0, 0.5862316233341618))))",
+    "best_long_fit": 16.91630710403314,
+    "best_short_fit": 69.39192369352295,
+    "best_meta_fit": 103.47510039132082
+  },
+  {
+    "seed": 1580778,
+    "fitness": 102.54788235049519,
+    "best_long_str": "macd_n(vec_mul(if_else(scalar_sin(vec_ema_last(IN1)), vec_mul(wma_series(IN2, 0.6283182094590474), vec_div_s(vec_log(IN1), scalar_clip01(IN4))), sma_series(vec_mul_s(sma_series(IN0, IN4), 13.0), 5.0)), if_else(sum_gt(vec_sub_s(IN2, mean_gt(IN0, IN4)), IN1), vec_mul(vec_sqrt(vec_sqrt(IN2)), vec_mul(vec_log(IN1), IN3)), vec_sub_s(vec_sqrt(IN0), vec_momentum(IN0)))))",
+    "best_short_str": "scalar_neg(scalar_min(scalar_div(vec_zscore(wma_series(vec_mul(IN3, IN0), stddev_n(IN3, 40.0))), scalar_add(vec_slope(ema_series(IN2, -0.6701805679513242)), protected_div(40.0, 15.0))), scalar_div(vec_mean_diff(IN2, IN1), vec_zscore(vec_div_s(vec_add(IN3, IN3), vec_mean_diff(IN3, IN3))))))",
+    "best_meta_str": "scalar_add(meta_sub(meta_implies(meta_nor(SIG0, -0.5206431002265668), meta_neg(SIG1)), scalar_sub(bool_and(bool_not(meta_neg(SIG1)), SIG1), SIG0)), scalar_sub(SIG0, scalar_sign(meta_sub(SIG1, scalar_sign(1.1934638877617267)))))",
+    "best_long_fit": 28.84796554373043,
+    "best_short_fit": 59.17548347011551,
+    "best_meta_fit": 102.54788235049519
+  },
+  {
+    "seed": 513025160,
+    "fitness": 98.77921052410801,
+    "best_long_str": "scalar_if_else(macd_n(ema_series(IN3, 25.0)), scalar_log(sum_gt(IN2, IN1)), macd_n(if_else(mean_gt(sma_series(wma_series(IN2, 37.0), scalar_lt(37.0, -0.6037662021198507)), IN4), vec_div_s(vec_neg(sma_series(IN1, 27.0)), scalar_neg(cross_below(IN3, IN1))), wma_series(sma_series(IN1, -0.6037662021198507), vec_slope(IN2)))))",
+    "best_short_str": "vec_slope(if_else(protected_div(IN4, vec_mean_diff(vec_add_s(vec_abs(IN2), scalar_sin(IN4)), IN1)), vec_mul_s(ema_series(IN3, IN4), rnd_mean_gt(ema_series(wma_series(IN2, 12.0), vec_median(IN2)), vec_ema_last(IN2), vec_median(IN2))), sma_series(ema_series(vec_mul(IN3, IN0), mean_gt(IN3, IN4)), scalar_mul(mean_gt(IN0, IN4), vec_mean_diff(wma_series(IN3, IN4), IN1)))))",
+    "best_meta_str": "meta_sub(bool_if_then_else(bool_xor(SIG1, SIG0), SIG0, scalar_add(scalar_neg(bool_xor(SIG0, 1.6535381539709282)), scalar_if_else(bool_or(SIG1, bool_or(SIG0, SIG0)), meta_neg(SIG0), SIG0))), bool_xor(SIG0, 1.6535381539709282))",
+    "best_long_fit": 28.504802259356325,
+    "best_short_fit": 63.65507516918535,
+    "best_meta_fit": 98.77921052410801
+  },
+  {
+    "seed": 1057789485,
+    "fitness": 98.29025671782175,
+    "best_long_str": "first_elem(vec_neg(if_else(vec_mean_diff(IN0, wma_series(vec_sub_s(IN2, 34.0), vec_mean_diff(IN1, IN0))), vec_sub(IN3, ema_series(vec_add_s(IN2, 35.0), bollinger_pctb(IN1, 30.0))), vec_div_s(IN1, scalar_log(vec_rsi(IN1))))))",
+    "best_short_str": "scalar_lt(vec_slope(ema_series(vec_neg(vec_add(vec_sqrt(IN0), sma_series(IN2, 16.0))), vec_slope(ema_series(sma_series(IN2, 16.0), 16.0)))), scalar_min(scalar_max(11.0, scalar_sin(vec_ema_last(vec_abs(IN0)))), scalar_if_else(scalar_mul(vec_range(IN1), sum_gt(IN2, vec_sub_s(IN0, 0.3596431773760609))), vec_rsi(IN1), scalar_mul(scalar_sin(scalar_log(29.0)), 25.0))))",
+    "best_meta_str": "meta_sub(meta_implies(SIG1, bool_if_then_else(SIG1, 1.867057168351983, meta_sub(scalar_sub(-0.03516904929273412, -0.15202239832522757), -0.07500888122980642))), bool_if_then_else(SIG0, meta_nor(-0.5429380886736492, SIG0), bool_if_then_else(SIG1, 1.867057168351983, meta_sub(SIG1, -0.07500888122980642))))",
+    "best_long_fit": 23.076602412393722,
+    "best_short_fit": 62.35082705258531,
+    "best_meta_fit": 98.29025671782175
+  },
+  {
+    "seed": 744207819,
+    "fitness": 97.96860897814342,
+    "best_long_str": "macd_n(if_else(macd_n(vec_mul(IN3, vec_mul(IN3, IN2))), if_else(scalar_gt(macd_n(vec_mul_s(IN2, 0.8678316534018342)), 34.0), vec_sub(wma_series(IN2, vec_momentum(IN0)), IN3), IN3), vec_mul(vec_mul(IN2, sma_series(IN0, 48.0)), vec_sqrt(sma_series(vec_sub(IN1, IN2), scalar_neg(IN4))))))",
+    "best_short_str": "scalar_div(vec_mean_diff(vec_div_s(ema_series(wma_series(IN3, 17.0), IN4), sum_gt(IN2, vec_sub_s(IN3, scalar_abs(30.0)))), IN2), vec_momentum(ema_series(IN2, stddev_n(vec_add(ema_series(IN2, 17.0), vec_add_s(IN3, 0.4140479130779662)), 0.4140479130779662))))",
+    "best_meta_str": "scalar_if_else(bool_if_then_else(bool_not(SIG1), scalar_if_else(scalar_neg(-0.8165516874590644), SIG0, meta_implies(SIG1, SIG1)), scalar_add(SIG0, SIG0)), 0.7536202926151767, -0.9525529907775212)",
+    "best_long_fit": 31.884896945092915,
+    "best_short_fit": 59.15856636665065,
+    "best_meta_fit": 97.96860897814342
+  },
+  {
+    "seed": 644546063,
+    "fitness": 97.07647657294952,
+    "best_long_str": "protected_div(vec_zscore(ema_series(IN2, vec_mean_diff(sma_series(IN3, 27.0), IN1))), protected_div(vec_mean_diff(IN2, vec_sub_s(if_else(bollinger_pctb(IN1, 20.0), IN1, if_else(28.0, IN3, IN3)), vec_roc(sma_series(IN0, 16.0)))), vec_rsi(vec_sub(vec_div_s(sma_series(IN0, 26.0), scalar_add(8.0, 11.0)), sma_series(IN2, vec_mean_diff(IN2, IN1))))))",
+    "best_short_str": "scalar_min(bollinger_pctb(ema_series(wma_series(vec_add_s(IN3, scalar_exp(34.0)), scalar_abs(8.0)), vec_rsi(IN0)), protected_div(scalar_std(ema_series(vec_add_s(IN2, 17.0), vec_zscore(IN1))), vec_rsi(vec_sub_s(vec_log(IN1), 41.0)))), vec_slope(vec_sub(vec_sub(vec_sub_s(ema_series(IN2, 30.0), vec_rsi(IN0)), wma_series(IN1, 0.8793498665981576)), sma_series(IN0, scalar_log(vec_slope(IN1))))))",
+    "best_meta_str": "meta_add(SIG0, scalar_sub(SIG0, scalar_tanh(bool_if_then_else(SIG0, SIG1, 1.7600412635700158))))",
+    "best_long_fit": 31.414012088234628,
+    "best_short_fit": 58.53931552346703,
+    "best_meta_fit": 97.07647657294952
+  },
+  {
+    "seed": 924160190,
+    "fitness": 96.36129371261715,
+    "best_long_str": "scalar_min(macd_n(vec_div_s(sma_series(if_else(vec_rsi(IN2), IN3, vec_neg(IN3)), 0.15105959395000212), bollinger_pctb(vec_mul(vec_sub(IN1, IN3), vec_sub(IN3, IN2)), vec_range(sma_series(IN1, IN4))))), sum_gt(vec_add_s(vec_add_s(IN2, 5.0), vec_rsi(ema_series(vec_sub(IN1, IN3), 25.0))), IN1))",
+    "best_short_str": "vec_dot(vec_mul(vec_mul(if_else(bollinger_pctb(IN2, 43.0), vec_mul(sma_series(IN1, IN4), sma_series(IN0, IN4)), vec_mul(vec_sub_s(IN0, IN4), vec_sub_s(IN0, IN4))), IN1), vec_sub(IN1, IN2)), vec_mul_s(IN1, vec_zscore(wma_series(ema_series(IN2, 25.0), bollinger_pctb(IN2, 25.0)))))",
+    "best_meta_str": "meta_neg(bool_if_then_else(scalar_tanh(scalar_sub(SIG1, SIG0)), meta_add(0.9723556116548306, meta_nor(SIG1, SIG0)), -1.8835560485011449))",
+    "best_long_fit": 30.60848573893892,
+    "best_short_fit": 59.40202215955267,
+    "best_meta_fit": 96.36129371261715
+  },
+  {
+    "seed": 762654125,
+    "fitness": 95.24402334188167,
+    "best_long_str": "macd_n(sma_series(sma_series(sma_series(vec_add(IN0, vec_add(IN0, IN3)), macd_n(vec_add(IN1, IN3))), vec_roc(vec_add_s(vec_mul(IN2, IN0), 0.25714173281886143))), vec_slope(vec_sub(IN3, sma_series(vec_sub_s(IN2, 10.0), vec_roc(IN3))))))",
+    "best_short_str": "scalar_gte(scalar_exp(vec_slope(vec_add(vec_add(ema_series(IN0, 0.8831000981242481), IN2), IN0))), macd_n(vec_mul(vec_mul(vec_add(IN1, IN2), vec_sqrt(IN2)), vec_mul(vec_mul(vec_add(IN3, IN3), IN2), wma_series(wma_series(IN0, 0.8831000981242481), vec_rsi(IN2))))))",
+    "best_meta_str": "scalar_sub(meta_implies(SIG0, SIG0), meta_add(bool_if_then_else(bool_or(bool_or(SIG1, SIG0), bool_or(0.13543960373118225, -0.8806392166508701)), SIG1, scalar_add(meta_implies(scalar_add(SIG1, SIG0), bool_or(SIG1, SIG0)), meta_implies(SIG0, SIG1))), SIG1))",
+    "best_long_fit": 22.460104184383553,
+    "best_short_fit": 60.196550501563586,
+    "best_meta_fit": 95.24402334188167
+  },
+  {
+    "seed": 924097915,
+    "fitness": 95.07414115217227,
+    "best_long_str": "scalar_if_else(macd_n(vec_div_s(vec_mul(vec_sqrt(vec_sqrt(IN1)), IN2), scalar_avg(vec_roc(vec_add(IN2, IN1)), scalar_min(scalar_min(0.7692458720305446, 27.0), 27.0)))), scalar_sub(sum_gt(IN2, vec_sub_s(IN3, 47.0)), vec_roc(IN1)), cross_above(sma_series(sma_series(ema_series(IN0, 0.7070451541135772), scalar_sin(IN4)), 20.0), vec_abs(vec_sub_s(sma_series(IN0, IN4), scalar_neg_check(-0.8219418095874411)))))",
+    "best_short_str": "scalar_lt(scalar_tanh(vec_median(vec_div_s(vec_sub(IN0, wma_series(IN1, 22.0)), vec_rsi(vec_sub_s(IN1, 30.0))))), vec_roc(wma_series(IN1, vec_slope(wma_series(IN2, 5.0)))))",
+    "best_meta_str": "scalar_sub(scalar_add(scalar_tanh(-0.6058572357025511), meta_sub(meta_mul(-0.5762283004630593, SIG0), meta_add(scalar_add(bool_not(SIG0), meta_mul(-1.6794007747888764, SIG0)), SIG1))), SIG1)",
+    "best_long_fit": 28.077400281521857,
+    "best_short_fit": 60.02879109465363,
+    "best_meta_fit": 95.07414115217227
+  },
+  {
+    "seed": 623214098,
+    "fitness": 94.15535762863327,
+    "best_long_str": "macd_n(if_else(vec_mean_diff(if_else(bollinger_pctb(IN2, 10.0), if_else(37.0, IN3, vec_neg(IN3)), vec_mul(vec_neg(IN2), vec_log(IN0))), vec_add_s(IN0, stddev_n(ema_series(IN1, 20.0), 20.0))), IN2, vec_mul(vec_log(wma_series(vec_div_s(IN0, 13.0), 20.0)), vec_mul(sma_series(vec_div_s(IN2, 0.558306119445616), scalar_eq(-0.3410036361856432, 20.0)), IN3))))",
+    "best_short_str": "vec_slope(vec_sub(vec_mul_s(if_else(sum_gt(vec_add_s(IN2, 16.0), sma_series(IN3, 39.0)), vec_add_s(IN2, 10.0), vec_abs(vec_sub_s(IN3, IN4))), sum_gt(IN1, IN2)), vec_log(vec_mul(vec_add_s(vec_add_s(IN1, IN4), IN4), vec_add_s(IN2, 10.0)))))",
+    "best_meta_str": "meta_add(scalar_add(meta_sub(-0.6205886426177427, scalar_if_else(meta_add(SIG1, -0.6998504610653282), meta_add(0.763377873965736, SIG1), scalar_add(-0.12534325600016372, scalar_sign(-1.1149494487999272)))), meta_sub(meta_add(SIG0, SIG0), SIG1)), scalar_sub(bool_if_then_else(meta_nand(SIG1, SIG0), scalar_tanh(scalar_sub(SIG1, SIG1)), 0.02518334773690123), bool_or(-1.4144177249635925, SIG1)))",
+    "best_long_fit": 18.630370022610595,
+    "best_short_fit": 64.29392248352342,
+    "best_meta_fit": 94.15535762863327
+  },
+  {
+    "seed": 458550844,
+    "fitness": 94.0916022508971,
+    "best_long_str": "scalar_div(sum_gt(vec_add(vec_sqrt(vec_add(wma_series(IN1, 12.0), vec_sub_s(IN2, IN4))), wma_series(IN2, vec_rsi(vec_sub_s(IN2, -0.8315601587676964)))), vec_abs(vec_neg(vec_add_s(IN1, 12.0)))), macd_n(ema_series(vec_sqrt(IN3), vec_slope(vec_abs(vec_sub(IN1, IN3))))))",
+    "best_short_str": "protected_div(scalar_add(scalar_tanh(vec_slope(wma_series(IN3, 19.0))), scalar_sqrt(scalar_gte(scalar_std(vec_add(IN2, IN3)), scalar_std(ema_series(IN1, -0.6442493167230623))))), wma_n(vec_sub(ema_series(vec_add_s(IN1, 0.4771149387021485), vec_zscore(IN3)), if_else(vec_mean_diff(vec_sub_s(IN1, -0.8767596956298276), IN2), wma_series(IN2, 14.0), vec_sub_s(vec_sub_s(IN0, 0.879087412847732), 0.879087412847732))), scalar_std(vec_add(sma_series(ema_series(IN2, IN4), sma_n(IN2, -0.23205950376102824)), if_else(scalar_std(IN2), IN3, IN2)))))",
+    "best_meta_str": "meta_sub(meta_add(scalar_sub(SIG0, SIG1), meta_implies(meta_add(SIG0, scalar_mul(scalar_if_else(0.8746806998308214, SIG0, SIG1), SIG1)), SIG0)), scalar_mul(scalar_add(SIG1, SIG0), meta_implies(SIG0, scalar_mul(scalar_if_else(0.8746806998308214, SIG0, SIG1), SIG1))))",
+    "best_long_fit": 25.755184697103125,
+    "best_short_fit": 64.35055838490649,
+    "best_meta_fit": 94.0916022508971
+  },
+  {
+    "seed": 266974171,
+    "fitness": 93.3047461351026,
+    "best_long_str": "macd_n(if_else(macd_n(vec_mul(vec_add_s(vec_add_s(IN2, IN4), IN4), IN3)), if_else(vec_roc(ema_series(IN2, 48.0)), vec_sub_s(vec_sub(IN1, IN3), vec_dot(vec_add_s(IN2, IN4), vec_mul(IN2, IN1))), vec_sub(vec_sub_s(IN1, 0.802321295300424), IN1)), vec_sub(vec_div_s(IN2, 0.1558470673503718), ema_series(wma_series(IN1, 22.0), stddev_n(IN2, IN4)))))",
+    "best_short_str": "scalar_sin(vec_norm(vec_mul_s(vec_sqrt(sma_series(sma_series(IN2, 29.0), vec_mean_diff(IN3, IN1))), protected_div(0.8483179059305455, 12.0))))",
+    "best_meta_str": "scalar_if_else(scalar_if_else(bool_or(SIG0, SIG0), bool_xor(scalar_sign(1.1861583781909872), meta_sub(SIG1, 1.6262261527275141)), SIG0), scalar_tanh(SIG0), scalar_if_else(0.5678830315753629, -0.7879949864945566, 1.8153103398317643))",
+    "best_long_fit": 29.451399961329603,
+    "best_short_fit": 59.15208012386776,
+    "best_meta_fit": 93.3047461351026
+  },
+  {
+    "seed": 389645047,
+    "fitness": 92.69656036697617,
+    "best_long_str": "macd_n(vec_mul(vec_add(sma_series(wma_series(IN3, 18.0), scalar_std(wma_series(IN3, 0.6162450171528042))), ema_series(IN0, 21.0)), vec_mul(wma_series(IN3, 0.6162450171528042), IN2)))",
+    "best_short_str": "scalar_avg(vec_slope(vec_add(wma_series(IN3, vec_sum(IN0)), sma_series(sma_series(sma_series(IN0, IN4), vec_rsi(IN2)), vec_slope(IN0)))), vec_rsi(ema_series(IN1, vec_slope(vec_mul_s(ema_series(IN0, 0.2925081104655445), 36.0)))))",
+    "best_meta_str": "meta_sub(scalar_if_else(bool_not(SIG1), bool_xor(meta_nand(SIG1, SIG1), SIG1), meta_add(-0.7057664459704651, SIG0)), bool_if_then_else(SIG0, -1.1758661292806494, SIG1))",
+    "best_long_fit": 18.796208590897837,
+    "best_short_fit": 53.38726659373292,
+    "best_meta_fit": 92.69656036697617
+  },
+  {
+    "seed": 779064407,
+    "fitness": 92.39587179214504,
+    "best_long_str": "scalar_min(scalar_div(scalar_gte(34.0, macd_n(sma_series(IN0, scalar_std(IN1)))), macd_n(IN3)), macd_n(vec_add(IN3, vec_add(IN2, vec_sub_s(IN3, macd_n(IN2))))))",
+    "best_short_str": "scalar_avg(sum_gt(vec_sub_s(IN1, vec_rsi(sma_series(sma_series(IN1, 49.0), vec_ema_last(IN1)))), vec_sub_s(IN2, vec_slope(vec_sub_s(IN3, IN4)))), scalar_neg_check(macd_n(vec_abs(sma_series(IN3, 0.07059740305302387)))))",
+    "best_meta_str": "bool_if_then_else(SIG0, scalar_sub(meta_nand(0.6267899992570509, SIG1), meta_implies(1.1932316577874902, bool_and(SIG1, SIG0))), meta_mul(bool_or(0.7974804571686072, SIG0), meta_neg(meta_sub(bool_if_then_else(SIG0, 0.052187365843886724, 1.5128471921782265), meta_nor(SIG1, -0.6098378449866648)))))",
+    "best_long_fit": 28.320510093783454,
+    "best_short_fit": 56.447538390442624,
+    "best_meta_fit": 92.39587179214504
+  },
+  {
+    "seed": 631323376,
+    "fitness": 91.53774776481485,
+    "best_long_str": "macd_n(vec_abs(vec_sub(vec_div_s(vec_add(ema_series(IN0, 32.0), vec_add(IN0, IN2)), macd_n(IN3)), vec_sub(vec_sub(IN2, ema_series(IN1, 0.928455024877419)), vec_sqrt(vec_add(IN0, IN0))))))",
+    "best_short_str": "scalar_lt(vec_zscore(vec_mul_s(vec_sub_s(wma_series(sma_series(IN2, 12.0), 25.0), -0.7438185424325123), -0.03763145193398554)), protected_div(scalar_cos(scalar_exp(0.6294554506720365)), macd_n(vec_sqrt(vec_add(IN2, IN3)))))",
+    "best_meta_str": "scalar_tanh(scalar_if_else(scalar_add(-0.9078170804196244, scalar_if_else(SIG1, bool_not(SIG0), SIG1)), scalar_neg(scalar_sign(bool_not(SIG0))), meta_implies(-0.4821524020347483, SIG0)))",
+    "best_long_fit": 26.284273621118714,
+    "best_short_fit": 62.846966308422594,
+    "best_meta_fit": 91.53774776481485
+  },
+  {
+    "seed": 536632587,
+    "fitness": 90.7170130472045,
+    "best_long_str": "scalar_min(vec_mean_diff(IN2, vec_sqrt(ema_series(vec_mul(vec_add_s(IN3, 0.20187209495726277), IN1), scalar_neg(scalar_neg(11.0))))), scalar_min(macd_n(vec_sub(IN3, IN2)), scalar_min(macd_n(vec_mul(vec_sqrt(IN2), vec_mul_s(IN3, 5.0))), scalar_log(vec_slope(IN1)))))",
+    "best_short_str": "bollinger_pctb(wma_series(vec_log(vec_log(IN3)), macd_n(IN0)), vec_range(sma_series(sma_series(sma_series(IN3, macd_n(IN1)), vec_rsi(wma_series(IN1, 32.0))), scalar_mean(vec_sub(vec_add_s(IN1, 41.0), wma_series(IN2, IN4))))))",
+    "best_meta_str": "scalar_if_else(bool_if_then_else(SIG1, SIG0, 1.6439939863408002), bool_not(-1.4991968105826028), bool_if_then_else(0.42961500327396784, -1.4294267795374225, -1.8129594082940503))",
+    "best_long_fit": 18.129079646523692,
+    "best_short_fit": 47.9003327115167,
+    "best_meta_fit": 90.7170130472045
+  },
+  {
+    "seed": 131332035,
+    "fitness": 90.66222764554621,
+    "best_long_str": "macd_n(vec_mul(vec_mul_s(vec_mul(vec_add_s(vec_log(IN2), vec_slope(IN1)), IN3), sum_gt(IN2, IN1)), ema_series(IN3, vec_slope(ema_series(IN0, 41.0)))))",
+    "best_short_str": "scalar_mul(scalar_exp(vec_momentum(vec_add(vec_add(ema_series(IN2, -0.44302442062862357), IN2), vec_add(IN1, sma_series(IN1, 11.0))))), scalar_neg(macd_n(vec_add(ema_series(wma_series(IN0, -0.44302442062862357), 30.0), vec_add(sma_series(IN1, 46.0), vec_add(IN3, IN2))))))",
+    "best_meta_str": "scalar_mul(scalar_add(meta_add(1.4988377491612073, 0.9820171121748471), meta_neg(meta_neg(1.4577266323148597))), meta_sub(SIG0, bool_if_then_else(scalar_sub(SIG1, -0.02111901132946814), scalar_tanh(SIG1), meta_neg(1.4577266323148597))))",
+    "best_long_fit": 18.44939196285039,
+    "best_short_fit": 61.982538994789124,
+    "best_meta_fit": 90.66222764554621
+  },
+  {
+    "seed": 1005146713,
+    "fitness": 90.40376374135182,
+    "best_long_str": "macd_n(vec_abs(if_else(vec_zscore(sma_series(wma_series(IN3, -0.5812119243132563), 26.0)), vec_div_s(vec_mul(vec_mul(IN3, IN2), IN2), scalar_sign(36.0)), wma_series(vec_sub(wma_series(IN1, 15.0), sma_series(IN1, -0.5266833149497308)), vec_rsi(vec_div_s(IN0, 44.0))))))",
+    "best_short_str": "scalar_min(scalar_add(vec_roc(wma_series(vec_mul_s(wma_series(IN3, 33.0), mean_gt(IN2, IN4)), vec_rsi(IN0))), scalar_lte(scalar_cos(bollinger_pctb(sma_series(IN2, 26.0), -0.6104340492779115)), vec_rsi(IN1))), wma_n(vec_sub(IN1, vec_sub_s(vec_abs(IN2), sum_gt(IN0, IN1))), vec_rsi(vec_abs(vec_div_s(ema_series(IN0, 24.0), 33.0)))))",
+    "best_meta_str": "scalar_sub(scalar_sub(bool_and(SIG0, meta_sub(bool_or(bool_or(SIG1, SIG0), meta_implies(0.03905050804784649, SIG1)), SIG1)), scalar_sign(scalar_neg(bool_xor(1.3603969156002491, SIG1)))), scalar_sign(SIG1))",
+    "best_long_fit": 24.185671701225473,
+    "best_short_fit": 62.24583992333052,
+    "best_meta_fit": 90.40376374135182
+  },
+  {
+    "seed": 626636218,
+    "fitness": 87.9309649432173,
+    "best_long_str": "macd_n(vec_mul(vec_add_s(wma_series(vec_add(ema_series(IN3, IN4), IN0), vec_rsi(IN2)), scalar_div(vec_min_elem(IN3), scalar_sub(scalar_neg_check(-0.6103152509612939), vec_roc(IN2)))), vec_add(IN3, IN2)))",
+    "best_short_str": "rnd_mean_gt(vec_log(vec_sub(IN3, vec_mul(IN3, vec_add_s(sma_series(IN0, 32.0), vec_slope(IN0))))), vec_slope(wma_series(vec_neg(vec_add(IN0, wma_series(IN3, 32.0))), scalar_std(wma_series(IN1, vec_range(IN2))))), first_elem(vec_sqrt(vec_sub(IN0, IN1))))",
+    "best_meta_str": "bool_if_then_else(meta_sub(bool_or(0.9570442183080816, -1.6839375459403576), meta_sub(SIG1, SIG0)), meta_implies(SIG0, bool_and(SIG0, 0.731696685278989)), scalar_sub(meta_sub(SIG0, SIG0), meta_implies(SIG0, SIG1)))",
+    "best_long_fit": 22.228468092751385,
+    "best_short_fit": 50.2025199454725,
+    "best_meta_fit": 87.9309649432173
+  },
+  {
+    "seed": 589139965,
+    "fitness": 87.51466658333322,
+    "best_long_str": "macd_n(vec_add_s(vec_mul_s(sma_series(IN3, vec_slope(vec_mul_s(IN0, 0.3530714176389622))), scalar_abs(sum_gt(IN2, IN1))), scalar_add(vec_sum(vec_sqrt(IN0)), scalar_if_else(vec_slope(sma_series(IN0, 50.0)), scalar_std(IN1), 50.0))))",
+    "best_short_str": "scalar_mul(macd_n(vec_neg(vec_mul(vec_mul(vec_mul(IN2, IN3), vec_log(IN1)), vec_log(vec_log(IN1))))), macd_n(vec_sub(ema_series(IN1, scalar_div(bollinger_pctb(IN1, 0.1708049489123824), bollinger_pctb(IN1, 50.0))), vec_sub_s(vec_abs(IN3), vec_roc(IN3)))))",
+    "best_meta_str": "meta_add(meta_sub(bool_or(SIG0, bool_not(SIG1)), meta_nand(scalar_sign(bool_xor(SIG0, -1.9422141543526599)), meta_sub(SIG0, meta_implies(SIG1, 0.4817711580987214)))), meta_sub(meta_implies(meta_neg(SIG0), bool_not(SIG1)), SIG1))",
+    "best_long_fit": 21.193720258100274,
+    "best_short_fit": 57.260151602086054,
+    "best_meta_fit": 87.51466658333322
+  },
+  {
+    "seed": 162142262,
+    "fitness": 85.81043205105324,
+    "best_long_str": "scalar_min(sum_gt(vec_add_s(IN2, vec_rsi(ema_series(IN2, 42.0))), IN1), macd_n(ema_series(IN3, vec_slope(vec_mul_s(vec_div_s(IN1, -0.39710632886667296), cross_below(IN0, IN1))))))",
+    "best_short_str": "scalar_mul(vec_mean_diff(IN1, IN2), vec_zscore(vec_mul(vec_add_s(vec_log(vec_mul(IN0, IN0)), stddev_n(IN2, 27.0)), sma_series(IN2, vec_mean_diff(ema_series(IN3, IN4), IN2)))))",
+    "best_meta_str": "scalar_tanh(scalar_neg(scalar_if_else(scalar_sub(scalar_tanh(meta_add(SIG1, 1.734917615685025)), bool_if_then_else(bool_not(SIG0), SIG1, 0.6862955142557254)), -1.3470868171509052, bool_if_then_else(bool_not(bool_not(SIG1)), SIG1, SIG1))))",
+    "best_long_fit": 23.146980738529848,
+    "best_short_fit": 56.62823390105006,
+    "best_meta_fit": 85.81043205105324
+  },
+  {
+    "seed": 160738853,
+    "fitness": 85.22147310691199,
+    "best_long_str": "stddev_n(vec_mul_s(wma_series(vec_log(IN0), vec_momentum(vec_abs(IN2))), mean_gt(vec_div_s(ema_series(sma_series(IN0, 39.0), cross_below(IN0, IN0)), macd_n(IN3)), vec_range(vec_mul_s(IN0, 0.7710131101676547)))), scalar_if_else(vec_slope(IN1), vec_slope(IN3), 0.42993313321816884))",
+    "best_short_str": "scalar_sin(first_elem(vec_sqrt(vec_mul_s(vec_div_s(vec_sub_s(IN1, 0.6045937444412124), 0.4698375870742004), 0.2797089849888408))))",
+    "best_meta_str": "meta_sub(meta_nor(scalar_tanh(1.4705049069083942), bool_and(1.4796436483097106, 0.7136226169495004)), meta_sub(meta_sub(SIG1, scalar_sub(scalar_neg(SIG1), SIG1)), meta_nand(scalar_neg(bool_xor(SIG0, SIG1)), scalar_neg(SIG1))))",
+    "best_long_fit": 20.231886689641122,
+    "best_short_fit": 59.79185059166298,
+    "best_meta_fit": 85.22147310691199
+  },
+  {
+    "seed": 225835918,
+    "fitness": 84.52029425195902,
+    "best_long_str": "macd_n(vec_add_s(vec_mul(vec_div_s(vec_mul(vec_mul(IN3, IN3), if_else(-0.16125691343935045, IN1, IN2)), scalar_clip01(19.0)), vec_sqrt(vec_mul(sma_series(IN0, IN4), IN2))), sum_gt(vec_div_s(IN3, 19.0), IN3)))",
+    "best_short_str": "scalar_gte(vec_roc(vec_sub(vec_log(vec_mul(IN3, vec_add(IN1, IN3))), vec_log(vec_mul(IN3, vec_add_s(IN2, 10.0))))), scalar_mean(vec_mul_s(vec_sub(IN2, IN1), sum_gt(vec_add_s(IN0, 29.0), sma_series(vec_add_s(IN2, 0.4028693751762833), 26.0)))))",
+    "best_meta_str": "bool_if_then_else(scalar_add(SIG1, SIG1), scalar_sign(-1.399054846329851), 1.4773521596734427)",
+    "best_long_fit": 17.13138142106848,
+    "best_short_fit": 59.550806109325606,
+    "best_meta_fit": 84.52029425195902
+  },
+  {
+    "seed": 759896632,
+    "fitness": 83.8649926499259,
+    "best_long_str": "macd_n(vec_add(ema_series(wma_series(IN3, scalar_avg(scalar_if_else(IN4, 48.0, 41.0), scalar_if_else(41.0, 41.0, IN4))), 7.0), vec_neg(ema_series(IN2, scalar_if_else(scalar_sin(IN4), 48.0, 49.0)))))",
+    "best_short_str": "vec_momentum(sma_series(vec_mul_s(vec_mul_s(wma_series(ema_series(IN1, 9.0), scalar_abs(31.0)), scalar_exp(scalar_abs(31.0))), scalar_mul(macd_n(vec_neg(IN2)), vec_rsi(ema_series(IN1, 49.0)))), scalar_std(vec_neg(wma_series(IN2, 16.0)))))",
+    "best_meta_str": "bool_if_then_else(meta_sub(SIG0, SIG1), bool_xor(SIG0, -0.8809847152187569), -1.9146825947801394)",
+    "best_long_fit": 21.410498682939306,
+    "best_short_fit": 55.87905421555238,
+    "best_meta_fit": 83.8649926499259
+  },
+  {
+    "seed": 838265528,
+    "fitness": 83.15775566633783,
+    "best_long_str": "wma_n(vec_sub(IN2, IN1), 48.0)",
+    "best_short_str": "bollinger_pctb(vec_add(sma_series(IN1, 19.0), ema_series(IN3, 47.0)), scalar_add(45.0, scalar_neg(vec_roc(vec_mul(vec_mul_s(IN2, 19.0), ema_series(IN2, 47.0))))))",
+    "best_meta_str": "scalar_add(bool_if_then_else(scalar_tanh(SIG0), scalar_add(SIG1, SIG0), meta_implies(SIG1, SIG0)), scalar_sub(scalar_tanh(SIG0), bool_or(SIG1, -0.6026516545599909)))",
+    "best_long_fit": 15.951423724982874,
+    "best_short_fit": 46.154510761575224,
+    "best_meta_fit": 83.15775566633783
+  },
+  {
+    "seed": 996671593,
+    "fitness": 80.68365251805672,
+    "best_long_str": "vec_zscore(vec_mul_s(vec_div_s(ema_series(wma_series(IN2, vec_roc(IN0)), vec_mean_diff(IN3, ema_series(IN0, -0.2051911406097362))), vec_mean_diff(vec_log(IN1), wma_series(vec_add(IN0, IN3), -0.23867356425157782))), vec_mean_diff(IN1, IN2)))",
+    "best_short_str": "scalar_avg(vec_norm(wma_series(wma_series(vec_sub(sma_series(IN2, 27.0), IN1), vec_mean_diff(IN3, IN0)), sma_n(if_else(vec_mean_diff(IN3, IN0), vec_sub(IN0, IN3), IN1), 20.0))), vec_ema_last(vec_div_s(vec_div_s(vec_mul_s(ema_series(IN3, 43.0), 0.25166439900058846), 40.0), -0.6323334525625703)))",
+    "best_meta_str": "bool_if_then_else(bool_if_then_else(bool_xor(SIG1, scalar_neg(SIG1)), SIG0, bool_not(SIG1)), meta_implies(SIG0, SIG0), scalar_neg(SIG1))",
+    "best_long_fit": 20.410663125011826,
+    "best_short_fit": 55.737180306786726,
+    "best_meta_fit": 80.68365251805672
+  },
+  {
+    "seed": 442468148,
+    "fitness": 80.07557742227061,
+    "best_long_str": "macd_n(vec_mul(vec_sub(vec_mul_s(IN2, IN4), vec_neg(IN3)), vec_mul(wma_series(vec_add(IN0, IN3), scalar_min(scalar_min(25.0, IN4), 27.0)), if_else(macd_n(vec_log(IN1)), vec_log(IN1), vec_add_s(vec_sqrt(IN3), macd_n(IN2))))))",
+    "best_short_str": "scalar_mul(scalar_mul(scalar_gt(vec_rsi(IN0), scalar_pow2(6.0)), macd_n(vec_mul_s(vec_add(vec_add(IN3, IN2), IN3), -0.25755236083660704))), scalar_pos(macd_n(vec_mul_s(vec_add(vec_add(IN3, IN1), sma_series(IN0, 15.0)), -0.25755236083660704))))",
+    "best_meta_str": "meta_add(bool_and(0.7474731210531358, SIG0), scalar_if_else(scalar_tanh(scalar_tanh(SIG0)), SIG0, meta_sub(SIG0, SIG1)))",
+    "best_long_fit": 22.42742493330456,
+    "best_short_fit": 57.362776754042976,
+    "best_meta_fit": 80.07557742227061
+  },
+  {
+    "seed": 344935251,
+    "fitness": 78.24389206799427,
+    "best_long_str": "macd_n(vec_add(vec_add(ema_series(vec_mul_s(vec_neg(IN2), 0.18775809201095628), vec_sum(vec_div_s(IN3, 0.1684278014785887))), vec_abs(sma_series(IN2, 0.8938249633485205))), IN3))",
+    "best_short_str": "scalar_min(sum_gt(IN3, ema_series(sma_series(ema_series(IN3, IN4), 12.0), stddev_n(vec_sub(ema_series(IN2, 12.0), IN0), scalar_pos(vec_min_elem(IN1))))), scalar_gte(scalar_gte(scalar_sin(vec_roc(wma_series(IN2, 12.0))), 0.7440410836547136), vec_zscore(ema_series(IN2, 12.0))))",
+    "best_meta_str": "scalar_sub(meta_sub(scalar_sub(SIG0, SIG0), meta_sub(SIG1, scalar_if_else(-0.9867184375597997, SIG0, meta_nor(SIG1, SIG1)))), bool_not(1.296149176100588))",
+    "best_long_fit": 17.3011529029966,
+    "best_short_fit": 57.12465140307976,
+    "best_meta_fit": 78.24389206799427
+  },
+  {
+    "seed": 375221133,
+    "fitness": 76.32563876863246,
+    "best_long_str": "scalar_min(macd_n(sma_series(vec_sub_s(vec_add_s(IN3, IN4), macd_n(vec_mul(IN3, IN2))), scalar_avg(scalar_sin(IN4), scalar_exp(vec_roc(IN0))))), macd_n(vec_mul(IN3, vec_mul(ema_series(vec_sqrt(IN3), vec_roc(IN1)), IN2))))",
+    "best_short_str": "scalar_min(vec_mean_diff(IN2, vec_add_s(vec_mul_s(vec_sub_s(vec_div_s(IN3, 22.0), IN4), vec_roc(vec_mul(IN1, IN2))), vec_range(IN0))), vec_mean_diff(wma_series(IN3, stddev_n(IN3, 24.0)), vec_add_s(vec_sub_s(IN2, 0.503499843696948), vec_zscore(vec_add(vec_neg(IN0), ema_series(IN0, 23.0))))))",
+    "best_meta_str": "scalar_sub(scalar_add(scalar_if_else(meta_sub(SIG0, meta_implies(SIG0, SIG1)), SIG0, meta_sub(0.1720642922466471, bool_not(SIG0))), scalar_sub(scalar_sub(scalar_sub(SIG0, SIG1), bool_if_then_else(scalar_tanh(SIG0), bool_not(SIG1), scalar_if_else(SIG1, 1.3499560218647457, -0.6974171324728142))), SIG1)), -1.8116881650476953)",
+    "best_long_fit": 19.12659489009797,
+    "best_short_fit": 54.15937992998116,
+    "best_meta_fit": 76.32563876863246
+  },
+  {
+    "seed": 105710746,
+    "fitness": 71.87244896472733,
+    "best_long_str": "protected_div(sum_gt(IN2, IN1), macd_n(vec_log(vec_mul(vec_mul(IN3, IN3), ema_series(IN3, 36.0)))))",
+    "best_short_str": "macd_n(vec_sub_s(vec_sub_s(vec_neg(vec_add(vec_add(IN3, IN2), IN2)), scalar_max(IN4, vec_ema_last(vec_sub_s(IN2, 11.0)))), scalar_div(first_elem(vec_mul_s(IN2, vec_rsi(IN0))), scalar_sigmoid(scalar_sub(vec_rsi(IN0), scalar_std(IN2))))))",
+    "best_meta_str": "scalar_add(scalar_if_else(SIG1, SIG0, SIG0), scalar_mul(scalar_sub(scalar_mul(-0.4008550099853516, SIG1), scalar_if_else(SIG1, meta_implies(SIG1, SIG1), -0.7693011267816021)), scalar_sign(meta_implies(SIG0, -0.49606909615321104))))",
+    "best_long_fit": 17.346998105043593,
+    "best_short_fit": 52.551778555459414,
+    "best_meta_fit": 71.87244896472733
+  },
+  {
+    "seed": 468207443,
+    "fitness": 71.42664010908197,
+    "best_long_str": "macd_n(vec_add(vec_add_s(ema_series(vec_add(IN3, vec_div_s(IN0, 0.9212428049372954)), scalar_relu(23.0)), scalar_cos(scalar_relu(ema_n(IN0, 8.0)))), vec_sub_s(sma_series(IN2, 0.5442471306592254), ema_n(IN0, 37.0))))",
+    "best_short_str": "sum_gt(vec_sub_s(vec_sub_s(ema_series(vec_abs(IN2), sum_gt(vec_abs(IN1), vec_div_s(IN2, -0.7882447502956185))), 46.0), scalar_sin(vec_dot(IN2, vec_abs(IN2)))), vec_add(vec_log(sma_series(sma_series(IN2, 46.0), vec_dot(IN3, IN1))), ema_series(IN2, 28.0)))",
+    "best_meta_str": "scalar_sign(meta_sub(scalar_sub(-1.9736030457263638, scalar_neg(scalar_sign(SIG0))), scalar_sub(meta_sub(SIG0, SIG0), SIG0)))",
+    "best_long_fit": 18.384065038405595,
+    "best_short_fit": 49.28812845930111,
+    "best_meta_fit": 71.42664010908197
+  }
+]
