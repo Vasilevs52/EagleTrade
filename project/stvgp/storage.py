@@ -16,11 +16,14 @@ import stvgp  # noqa: F401  (нужен ради побочного эффект
 from primitives import pset_long, pset_short, pset_meta
 
 RESULTS_FILE = "evolution_results.json"
+# v2 («честная эволюция»): в записи fitness = ВАЛИДАЦИОННЫЙ скор, поэтому
+# сортировка и load_best_hofs автоматически выбирают лучшее по валидации.
+RESULTS_FILE_V2 = "evolution_results_v2.json"
 
 
 def _record_from_result(r):
     """Извлекает сохраняемые поля из результата одного прогона."""
-    return {
+    rec = {
         "seed":           r.get("seed"),
         "fitness":        r.get("fitness"),
         "best_long_str":  r.get("best_long_str"),
@@ -30,6 +33,11 @@ def _record_from_result(r):
         "best_short_fit": r.get("best_short_fit"),
         "best_meta_fit":  r.get("best_meta_fit"),
     }
+    # Доп. поля v2 (train/val/gap и контекст данных) — пропускаем как есть.
+    for opt in ("train_fit", "val_fit", "gap", "v2", "assets", "interval"):
+        if opt in r:
+            rec[opt] = r[opt]
+    return rec
 
 
 def append_result_locked(result, filename=RESULTS_FILE):

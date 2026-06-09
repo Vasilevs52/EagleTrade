@@ -220,3 +220,127 @@ def evolve(bars, ndf, seed=None, pop_size=250, offspring=320, ngen=300,
                      title_prefix="[TRAIN] ")
 
     return (pop_long, pop_short, pop_meta), (hof_long, hof_short, hof_meta)
+
+
+# =====================================================================
+# EVOLUTION V2 — «честная» эволюция с защитой от переобучения
+# =====================================================================
+
+def evolve_robust(train_segments, val_segments, seed=None,
+                  pop_size=None, offspring=None, ngen=None, verbose=True):
+    """
+    Эволюция v2 на мульти-активных walk-forward окнах (см. robust.py).
+
+    Анти-переобучение:
+      • fitness = mean(окна) − alpha·std − штраф за размер дерева;
+      • финальный отбор meta — НЕ по train, а по val_segments (свежие окна,
+        которых эволюция не видела);
+      • возвращает и train, и val fitness — их разрыв (gap) показывает
+        степень переобучения.
+
+    Возвращает (hofs, info):
+      hofs = ([best_long], [best_short], [best_meta_by_val]) — совместимо
+             с storage/record_to_hofs/quick_profit_summary;
+      info = {train_fit, val_fit, gap, ranked}
+    """
+    from robust import (evalLongRobust, evalShortRobust, evalMetaRobust,
+                        precompute_actives)
+    from config import CFG2
+
+    pop_size = pop_size if pop_size is not None else CFG2.pop_size
+    offspring = offspring if offspring is not None else CFG2.offspring
+    ngen = ngen if ngen is not None else CFG2.ngen
+
+    if seed is None:
+        seed = int(datetime.now().timestamp() * 1000) % (2**31)
+    random.seed(seed)
+    if verbose:
+        print(f"[v2 seed={seed}] окон train={len(train_segments)}, "
+              f"val={len(val_segments)}, pop={pop_size}, ngen={ngen}")
+
+    pop_long = toolbox_long.population(n=pop_size)
+    pop_short = toolbox_short.population(n=pop_size)
+    pop_meta = toolbox_meta.population(n=pop_size)
+
+    hof_long = tools.HallOfFame(5)
+    hof_short = tools.HallOfFame(5)
+    # Meta-HOF шире: это пул кандидатов для отбора по валидации.
+    hof_meta = tools.HallOfFame(25)
+
+    toolbox_long.register("evaluate", evalLongRobust, segments=train_segments)
+    toolbox_short.register("evaluate", evalShortRobust, segments=train_segments)
+
+    for pop, tb in [(pop_long, toolbox_long), (pop_short, toolbox_short)]:
+        fits = list(map(tb.evaluate, pop))
+        for ind, fit in zip(pop, fits):
+            ind.fitness.values = fit
+    hof_long.update(pop_long)
+    hof_short.update(pop_short)
+
+    prev_target = None
+    best_long_func = best_short_func = None
+    for gen in range(ngen):
+        pop_long = evolve_one_gen(pop_long, toolbox_long, hof_long,
+                                  mu=pop_size, lambda_=offspring)
+        pop_short = evolve_one_gen(pop_short, toolbox_short, hof_short,
+                                   mu=pop_size, lambda_=offspring)
+
+        best_long_func = gp.compile(hof_long[0], pset_long)
+        best_short_func = gp.compile(hof_short[0], pset_short)
+        actives = precompute_actives(train_segments,
+                                     best_long_func, best_short_func)
+
+        toolbox_meta.register("evaluate", evalMetaRobust,
+                              segments=train_segments,
+                              best_long_func=best_long_func,
+                              best_short_func=best_short_func,
+                              actives=actives)
+
+        # Та же логика «плавающей мишени», что в v1: при смене лучших
+        # long/short фитнес старых meta-особей несопоставим — пересчитываем.
+        cur_target = (str(hof_long[0]), str(hof_short[0]))
+        if gen == 0 or cur_target != prev_target:
+            for ind in pop_meta:
+                if ind.fitness.valid:
+                    del ind.fitness.values
+            hof_meta = tools.HallOfFame(25)
+            fits = list(map(toolbox_meta.evaluate, pop_meta))
+            for ind, fit in zip(pop_meta, fits):
+                ind.fitness.values = fit
+            hof_meta.update(pop_meta)
+        prev_target = cur_target
+
+        pop_meta = evolve_one_gen(pop_meta, toolbox_meta, hof_meta,
+                                  mu=pop_size, lambda_=offspring)
+
+        if verbose and (gen % 5 == 0 or gen == ngen - 1):
+            mf = [ind.fitness.values[0] for ind in pop_meta]
+            print(f"  [v2 seed={seed}] gen {gen + 1}/{ngen}  "
+                  f"meta max={max(mf):.2f} avg={np.mean(mf):.2f}")
+
+    # ----- Финальный отбор по ВАЛИДАЦИИ (окна, которых train не видел) -----
+    from robust import evalMetaRobust as _emr
+    val_actives = precompute_actives(val_segments,
+                                     best_long_func, best_short_func)
+    ranked = []
+    for m in hof_meta:
+        train_fit = m.fitness.values[0]
+        val_fit = _emr(m, val_segments, best_long_func, best_short_func,
+                       val_actives)[0]
+        ranked.append((val_fit, train_fit, m))
+    ranked.sort(key=lambda x: x[0], reverse=True)
+
+    best_val, best_train, best_meta = ranked[0]
+    info = {
+        "train_fit": best_train,
+        "val_fit": best_val,
+        "gap": best_train - best_val,
+        # топ-10 для анализа (val, train, дерево)
+        "ranked": [(v, t, str(m)) for v, t, m in ranked[:10]],
+    }
+    if verbose:
+        print(f"[v2 seed={seed}] ОТБОР ПО ВАЛИДАЦИИ: "
+              f"val={best_val:.2f}, train={best_train:.2f}, "
+              f"gap={info['gap']:.2f} (меньше gap = меньше переобучение)")
+
+    return ((hof_long, hof_short, [best_meta]), info)

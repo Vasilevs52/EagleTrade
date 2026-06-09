@@ -2,11 +2,15 @@
 # DATA LOADER — загрузка истории с Binance и подготовка баров
 # =====================================================================
 
+import os
+import pickle
+from datetime import datetime, timedelta, timezone
+
 import numpy as np
 import pandas as pd
 from binance.client import Client
 
-from config import CFG
+from config import CFG, CFG2
 
 
 class BinanceBroker():
@@ -87,3 +91,86 @@ def load_period(symbol, interval, start, end, window=None):
     df = add_indicators(df, window=window)
     bars = build_input_vectors(df, min_window=window)
     return df, bars
+
+
+# =====================================================================
+# V2 — мульти-активный датасет для «честной эволюции»
+# =====================================================================
+
+_BARS_PER_DAY = {"15m": 96, "30m": 48, "1h": 24, "2h": 12, "4h": 6}
+
+
+def load_v2_dataset(force=False, cache_path=None):
+    """
+    Готовит датасет v2: по каждому активу из CFG2.assets качает историю,
+    строит бары и нарезает на три зоны (по времени, без перемешивания):
+
+      • holdout — нетронутые ПОСЛЕДНИЕ holdout_days (финальный тест, 1 раз)
+      • val     — n_val_windows самых свежих окон ДО holdout (отбор стратегий)
+      • train   — n_train_windows окон, равномерно по остальной истории
+
+    Результат кешируется в pickle: повторный вызов (в т.ч. из дочерних
+    spawn-процессов) читает с диска, не дёргая Binance.
+    """
+    cache_path = cache_path or CFG2.cache_file
+    if not force and os.path.exists(cache_path):
+        with open(cache_path, "rb") as f:
+            return pickle.load(f)
+
+    per_day = _BARS_PER_DAY.get(CFG2.interval, 24)
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(days=CFG2.history_days + CFG2.holdout_days)
+    wb = CFG2.window_bars
+
+    dataset = {"assets": [], "train": [], "val": [], "holdout": [],
+               "created": now.isoformat(), "interval": CFG2.interval}
+
+    print(f"V2: качаю {CFG2.history_days + CFG2.holdout_days} дней "
+          f"{CFG2.interval} по {len(CFG2.assets)} активам...")
+    for sym in CFG2.assets:
+        df = get_history_data(sym, CFG2.interval,
+                              start.strftime("%Y-%m-%d"), now.strftime("%Y-%m-%d"))
+        df = add_indicators(df)
+        bars = build_input_vectors(df)
+
+        hold_n = CFG2.holdout_days * per_day
+        need = hold_n + wb * (CFG2.n_val_windows + 1)
+        if len(bars) <= need:
+            print(f"  {sym}: мало данных ({len(bars)} баров < {need}), пропускаю")
+            continue
+
+        holdout = bars[-hold_n:]
+        rest = bars[:-hold_n]
+
+        # Валидация: самые свежие окна (до holdout)
+        val_segs = []
+        for k in range(CFG2.n_val_windows):
+            end_i = len(rest) - k * wb
+            st_i = end_i - wb
+            if st_i < 0:
+                break
+            val_segs.append(rest[st_i:end_i])
+
+        # Обучение: равномерные окна по оставшейся (более старой) истории
+        train_zone = rest[:len(rest) - len(val_segs) * wb]
+        L = len(train_zone)
+        if L < wb:
+            print(f"  {sym}: train-зона мала ({L} баров), пропускаю")
+            continue
+        n = CFG2.n_train_windows
+        step = max(1, (L - wb) // max(1, n - 1))
+        train_segs = [train_zone[i:i + wb]
+                      for i in range(0, L - wb + 1, step)][:n]
+
+        dataset["assets"].append(sym)
+        dataset["train"].extend(train_segs)
+        dataset["val"].extend(val_segs)
+        dataset["holdout"].append((sym, holdout))
+        print(f"  {sym}: train {len(train_segs)}x{wb}, val {len(val_segs)}x{wb}, "
+              f"holdout {len(holdout)} баров")
+
+    with open(cache_path, "wb") as f:
+        pickle.dump(dataset, f)
+    print(f"  кеш сохранён: {cache_path} "
+          f"(train {len(dataset['train'])} окон, val {len(dataset['val'])})")
+    return dataset
