@@ -111,6 +111,9 @@ def show_saved(top=20):
         print(f"{i:>3} {r.get('seed'):>11} {r.get('val_fit', 0):>8.2f} "
               f"{r.get('train_fit', 0):>8.2f} {r.get('gap', 0):>8.2f}")
     print("=" * 70)
+    print("ВНИМАНИЕ: val лучшей записи оптимистичен («проклятие победителя»:")
+    print("много кандидатов оценено на одних val-окнах). Истинная проверка —")
+    print("HOLDOUT (меню 3), и только один раз.")
 
 
 def holdout_eval():
@@ -165,7 +168,7 @@ def noise_baseline(pop=None, off=None, gens=None):
     """
     import numpy as np
     import pandas as pd
-    from data_loader import add_indicators, build_input_vectors
+    from data_loader import add_indicators, build_input_vectors, normalize_segment
     from stvgp import evolve_robust
     from config import CFG
 
@@ -175,14 +178,13 @@ def noise_baseline(pop=None, off=None, gens=None):
 
     ds = load_v2_dataset()
     rng = np.random.default_rng(20260607)
-    print(f"Генерирую {len(ds['train'])} шумовых окон "
-          f"(random walk, волатильность как у реальных)...")
-    synth = []
-    for seg in ds["train"]:
-        prices = [b["cur"] for b in seg]
+
+    def make_noise_window(template_seg):
+        """Шумовое окно random-walk с волатильностью реального окна."""
+        prices = [b["cur"] for b in template_seg]
         rets = np.diff(prices) / np.asarray(prices[:-1])
         std = float(rets.std()) if len(rets) > 1 else 0.01
-        n = len(seg) + 2 * CFG.window + 2   # запас на прогрев индикаторов
+        n = len(template_seg) + 2 * CFG.window + 2  # прогрев индикаторов
         p = [float(prices[0])]
         for _ in range(n - 1):
             p.append(p[-1] * (1 + rng.normal(0, std)))
@@ -191,11 +193,21 @@ def noise_baseline(pop=None, off=None, gens=None):
             "Price": p,
         })
         df = add_indicators(df)
-        sb = build_input_vectors(df)
-        synth.append(sb[:len(seg)])
+        sb = build_input_vectors(df)[:len(template_seg)]
+        # та же нормализация, что и у реальных данных
+        return normalize_segment(sb) if CFG2.normalize else sb
+
+    n_val = max(2, len(ds["train"]) // 6)
+    print(f"Генерирую {len(ds['train'])} train + {n_val} val шумовых окон "
+          f"(random walk, волатильность как у реальных)...")
+    synth_train = [make_noise_window(seg) for seg in ds["train"]]
+    # ОТДЕЛЬНЫЕ val-окна (другие розыгрыши шума), а не подмножество train —
+    # иначе val на шуме был бы завышен (валидация на обучающих данных).
+    synth_val = [make_noise_window(ds["train"][i % len(ds["train"])])
+                 for i in range(n_val)]
 
     print(f"Эволюция на шуме: pop={pop}, ngen={gens} (займёт как боевой прогон)...")
-    _, info = evolve_robust(synth, synth[:max(2, len(synth)//6)],
+    _, info = evolve_robust(synth_train, synth_val,
                             seed=999, pop_size=pop, offspring=off, ngen=gens)
     print("\n" + "=" * 70)
     print(f"БАЗОВАЯ ЛИНИЯ НА ШУМЕ: train={info['train_fit']:.2f}, "

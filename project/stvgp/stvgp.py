@@ -251,6 +251,13 @@ def evolve_robust(train_segments, val_segments, seed=None,
     offspring = offspring if offspring is not None else CFG2.offspring
     ngen = ngen if ngen is not None else CFG2.ngen
 
+    if ngen < 1:
+        raise ValueError("evolve_robust: ngen должен быть >= 1 (иначе "
+                         "лучшие long/short не определены для val-отбора)")
+    if not train_segments or not val_segments:
+        raise ValueError("evolve_robust: нужны непустые train_segments "
+                         "и val_segments")
+
     if seed is None:
         seed = int(datetime.now().timestamp() * 1000) % (2**31)
     random.seed(seed)
@@ -319,14 +326,19 @@ def evolve_robust(train_segments, val_segments, seed=None,
                   f"meta max={max(mf):.2f} avg={np.mean(mf):.2f}")
 
     # ----- Финальный отбор по ВАЛИДАЦИИ (окна, которых train не видел) -----
-    from robust import evalMetaRobust as _emr
+    # Пул кандидатов = HOF (train-топ) ∪ финальная популяция: особь
+    # «средняя на train, отличная на val» (то, что нам и нужно) в HOF не
+    # попадает — без объединения она не могла бы выиграть отбор.
     val_actives = precompute_actives(val_segments,
                                      best_long_func, best_short_func)
+    candidates = {}
+    for m in list(hof_meta) + list(pop_meta):
+        candidates.setdefault(str(m), m)   # дедуп по тексту дерева
     ranked = []
-    for m in hof_meta:
+    for m in candidates.values():
         train_fit = m.fitness.values[0]
-        val_fit = _emr(m, val_segments, best_long_func, best_short_func,
-                       val_actives)[0]
+        val_fit = evalMetaRobust(m, val_segments, best_long_func,
+                                 best_short_func, val_actives)[0]
         ranked.append((val_fit, train_fit, m))
     ranked.sort(key=lambda x: x[0], reverse=True)
 

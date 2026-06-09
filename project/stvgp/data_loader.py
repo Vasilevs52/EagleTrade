@@ -100,6 +100,38 @@ def load_period(symbol, interval, start, end, window=None):
 _BARS_PER_DAY = {"15m": 96, "30m": 48, "1h": 24, "2h": 12, "4h": 6}
 
 
+def normalize_segment(seg):
+    """
+    Нормализует окно: все цены делятся на первую цену окна (cur[0]).
+
+    Зачем: деревья видят сырые цены, а активы различаются масштабом в
+    ~100000 раз (BTC 60000 vs XRP 0.5). Без нормализации дерево может
+    «опознать актив» (if цена>1000 -> BTC-логика) и построить
+    asset-specific подстратегии — это дыра в мульти-активной защите.
+    После нормализации все активы выглядят как ~1.0 ± проценты.
+
+    PnL НЕ меняется: (a-b)/b инвариантно к общему множителю, поэтому
+    eval-функции и симулятор дают идентичные результаты.
+    Возвращает НОВЫЕ dict'ы (не мутирует вход — окна могут пересекаться).
+    """
+    if not seg:
+        return seg
+    base = float(seg[0]["cur"])
+    if base <= 0:
+        return seg
+    out = []
+    for b in seg:
+        out.append({
+            "price": [x / base for x in b["price"]],
+            "sma":   [x / base for x in b["sma"]],
+            "ema":   [x / base for x in b["ema"]],
+            "lwma":  [x / base for x in b["lwma"]],
+            "cur":   b["cur"] / base,
+            "next":  b["next"] / base,
+        })
+    return out
+
+
 def load_v2_dataset(force=False, cache_path=None):
     """
     Готовит датасет v2: по каждому активу из CFG2.assets качает историю,
@@ -113,9 +145,29 @@ def load_v2_dataset(force=False, cache_path=None):
     spawn-процессов) читает с диска, не дёргая Binance.
     """
     cache_path = cache_path or CFG2.cache_file
+    # Метка конфигурации: если конфиг изменился — кеш невалиден.
+    cfg_meta = {
+        "assets": tuple(CFG2.assets), "interval": CFG2.interval,
+        "history_days": CFG2.history_days, "holdout_days": CFG2.holdout_days,
+        "n_train_windows": CFG2.n_train_windows,
+        "n_val_windows": CFG2.n_val_windows,
+        "window_bars": CFG2.window_bars,
+        "normalize": getattr(CFG2, "normalize", False),
+    }
     if not force and os.path.exists(cache_path):
         with open(cache_path, "rb") as f:
-            return pickle.load(f)
+            cached = pickle.load(f)
+        if cached.get("cfg_meta") == cfg_meta:
+            try:
+                age = datetime.now(timezone.utc) - datetime.fromisoformat(
+                    cached["created"])
+                if age.days >= 7:
+                    print(f"ВНИМАНИЕ: кешу данных {age.days} дней — данные "
+                          f"устарели. Обновить: python main2.py -> 5")
+            except (KeyError, ValueError):
+                pass
+            return cached
+        print("Конфигурация V2 изменилась — перекачиваю данные...")
 
     per_day = _BARS_PER_DAY.get(CFG2.interval, 24)
     now = datetime.now(timezone.utc)
@@ -123,7 +175,8 @@ def load_v2_dataset(force=False, cache_path=None):
     wb = CFG2.window_bars
 
     dataset = {"assets": [], "train": [], "val": [], "holdout": [],
-               "created": now.isoformat(), "interval": CFG2.interval}
+               "created": now.isoformat(), "interval": CFG2.interval,
+               "cfg_meta": cfg_meta}
 
     print(f"V2: качаю {CFG2.history_days + CFG2.holdout_days} дней "
           f"{CFG2.interval} по {len(CFG2.assets)} активам...")
@@ -159,15 +212,28 @@ def load_v2_dataset(force=False, cache_path=None):
             continue
         n = CFG2.n_train_windows
         step = max(1, (L - wb) // max(1, n - 1))
+        if step < wb:
+            print(f"  ВНИМАНИЕ {sym}: train-окна перекрываются "
+                  f"(step={step} < window_bars={wb}) — перекрытие завышает "
+                  f"оценку стабильности. Увеличьте history_days или "
+                  f"уменьшите n_train_windows/window_bars.")
         train_segs = [train_zone[i:i + wb]
                       for i in range(0, L - wb + 1, step)][:n]
+
+        # Нормализация (см. normalize_segment): убирает идентификацию
+        # актива по абсолютной цене. Применяется ко ВСЕМ зонам одинаково.
+        if cfg_meta["normalize"]:
+            train_segs = [normalize_segment(s) for s in train_segs]
+            val_segs = [normalize_segment(s) for s in val_segs]
+            holdout = normalize_segment(holdout)
 
         dataset["assets"].append(sym)
         dataset["train"].extend(train_segs)
         dataset["val"].extend(val_segs)
         dataset["holdout"].append((sym, holdout))
         print(f"  {sym}: train {len(train_segs)}x{wb}, val {len(val_segs)}x{wb}, "
-              f"holdout {len(holdout)} баров")
+              f"holdout {len(holdout)} баров"
+              + (" [нормализовано]" if cfg_meta["normalize"] else ""))
 
     with open(cache_path, "wb") as f:
         pickle.dump(dataset, f)
